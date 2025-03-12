@@ -8,6 +8,10 @@ npm install
 # Build the project
 npm run build
 
-# Create a directory for auth data if it doesn't exist
+# Create directories for auth data if they don't exist
 mkdir -p auth_info_lovebot
-mkdir -p data/contexts 
+mkdir -p data/contexts
+
+# Copy public directory to dist for serving static files
+mkdir -p dist/public
+cp -r public/* dist/public/ 
