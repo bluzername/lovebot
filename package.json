@@ -7,7 +7,7 @@
     "build": "tsc",
     "start": "node -r ./crypto-polyfill.js dist/index.js",
     "start:local": "node -r ./crypto-polyfill.js --require ts-node/register src/cli.ts --local-only",
-    "render-start": "node -r ./crypto-polyfill.js ./start.sh",
+    "render-start": "node -r ./crypto-polyfill.js dist/index.js",
     "dev": "node -r ./crypto-polyfill.js -r ts-node/register src/index.ts",
     "watch": "nodemon --exec node -r ./crypto-polyfill.js -r ts-node/register src/index.ts",
     "cli": "node -r ./crypto-polyfill.js -r ts-node/register --transpile-only src/cli.ts"

@@ -9,6 +9,7 @@ import { config } from 'dotenv';
 import { createServer } from 'http';
 import { WhatsAppClient } from './controllers/whatsapp';
 import { setupRoutes } from './controllers/routes';
+import fs from 'fs';
 
 // Load environment variables
 config();
@@ -20,12 +21,25 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(join(__dirname, '../src/public')));
+
+// Determine the correct path for static files
+const publicPath = fs.existsSync(join(__dirname, 'public')) 
+  ? join(__dirname, 'public')  // For production (compiled)
+  : join(__dirname, '../src/public');  // For development
+
+console.log(`Serving static files from: ${publicPath}`);
+app.use(express.static(publicPath));
+
+// Also serve files from the root public directory
+const rootPublicPath = join(__dirname, '../public');
+if (fs.existsSync(rootPublicPath)) {
+  console.log(`Also serving static files from: ${rootPublicPath}`);
+  app.use(express.static(rootPublicPath));
+}
 
 // Set view engine
 app.set('view engine', 'html');
 app.engine('html', (filePath, options, callback) => {
-  const fs = require('fs');
   fs.readFile(filePath, (err: NodeJS.ErrnoException | null, content: Buffer) => {
     if (err) return callback(err);
     return callback(null, content.toString());
