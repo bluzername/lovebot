@@ -5,12 +5,12 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
-    "start:local": "node --require ts-node/register src/cli.ts --local-only",
-    "render-start": "./start.sh",
-    "dev": "ts-node src/index.ts",
-    "watch": "nodemon --exec ts-node src/index.ts",
-    "cli": "ts-node --transpile-only src/cli.ts"
+    "start": "node -r ./crypto-polyfill.js dist/index.js",
+    "start:local": "node -r ./crypto-polyfill.js --require ts-node/register src/cli.ts --local-only",
+    "render-start": "node -r ./crypto-polyfill.js ./start.sh",
+    "dev": "node -r ./crypto-polyfill.js -r ts-node/register src/index.ts",
+    "watch": "nodemon --exec node -r ./crypto-polyfill.js -r ts-node/register src/index.ts",
+    "cli": "node -r ./crypto-polyfill.js -r ts-node/register --transpile-only src/cli.ts"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",

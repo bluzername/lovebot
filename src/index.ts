@@ -1,3 +1,8 @@
+// Import crypto polyfill first to ensure it's available
+import crypto from 'crypto';
+// Ensure crypto is available globally
+(global as any).crypto = crypto;
+
 import express from 'express';
 import { join } from 'path';
 import { config } from 'dotenv';
