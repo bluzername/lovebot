@@ -2,8 +2,8 @@
 # exit on error
 set -o errexit
 
-# Install dependencies
-npm install
+# Install all dependencies including dev dependencies
+npm install --include=dev
 
 # Build the project
 npm run build
@@ -14,4 +14,4 @@ mkdir -p data/contexts
 
 # Copy public directory to dist for serving static files
 mkdir -p dist/public
-cp -r public/* dist/public/ 
+cp -r public/* dist/public/ || echo "No public files to copy" 

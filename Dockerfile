@@ -5,9 +5,8 @@ WORKDIR /app
 # Copy package files first for better caching
 COPY package*.json ./
 
-# Install dependencies with clean cache to keep image size down
-RUN npm ci --only=production && \
-    npm cache clean --force
+# Install all dependencies including dev dependencies
+RUN npm install --include=dev
 
 # Copy the rest of the application
 COPY . .
