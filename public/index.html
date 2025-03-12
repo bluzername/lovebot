@@ -28,10 +28,48 @@
         }
         .qr-container {
             margin: 20px 0;
+            position: relative;
         }
         .qr-container img {
             max-width: 300px;
             height: auto;
+        }
+        .refresh-button {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .refresh-button:hover {
+            background-color: #45a049;
+        }
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(255, 255, 255, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            display: none;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 2s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
         p {
             color: #666;
@@ -61,7 +99,11 @@
         <h1>LoveBot WhatsApp QR Code</h1>
         <div class="qr-container">
             <img src="qr.png" alt="WhatsApp QR Code" id="qr-code">
+            <div class="loading-overlay" id="loading-overlay">
+                <div class="spinner"></div>
+            </div>
         </div>
+        <button class="refresh-button" id="refresh-button">Refresh QR Code</button>
         <div id="status" class="status disconnected">
             Waiting for connection...
         </div>
@@ -75,14 +117,36 @@
         const qrImg = document.getElementById('qr-code');
         const statusDiv = document.getElementById('status');
         const lastUpdatedText = document.getElementById('last-updated');
+        const refreshButton = document.getElementById('refresh-button');
+        const loadingOverlay = document.getElementById('loading-overlay');
         let lastUpdate = 0;
 
         // Function to update QR code
-        function updateQRCode() {
-            qrImg.src = 'qr.png?' + new Date().getTime();
-            lastUpdatedText.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
-            statusDiv.className = 'status updating';
-            statusDiv.textContent = 'QR Code updated. Please scan with WhatsApp.';
+        function updateQRCode(showLoading = true) {
+            if (showLoading) {
+                loadingOverlay.style.display = 'flex';
+            }
+            
+            // Add timestamp to prevent caching
+            const timestamp = new Date().getTime();
+            const newSrc = `qr.png?t=${timestamp}`;
+            
+            // Create a new image object to preload
+            const newImg = new Image();
+            newImg.onload = function() {
+                // Once loaded, update the visible image
+                qrImg.src = newSrc;
+                loadingOverlay.style.display = 'none';
+                lastUpdatedText.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+                statusDiv.className = 'status updating';
+                statusDiv.textContent = 'QR Code updated. Please scan with WhatsApp.';
+            };
+            newImg.onerror = function() {
+                loadingOverlay.style.display = 'none';
+                statusDiv.className = 'status disconnected';
+                statusDiv.textContent = 'Error loading QR code. Please try refreshing.';
+            };
+            newImg.src = newSrc;
         }
 
         // Listen for QR code updates
@@ -91,6 +155,19 @@
             if (data.timestamp > lastUpdate) {
                 lastUpdate = data.timestamp;
                 updateQRCode();
+                if (data.message) {
+                    statusDiv.textContent = data.message;
+                }
+            }
+        });
+
+        // Listen for QR image updates
+        socket.on('qr-image-updated', (data) => {
+            console.log('QR image updated:', data);
+            if (data.timestamp > lastUpdate) {
+                lastUpdate = data.timestamp;
+                qrImg.src = data.url;
+                lastUpdatedText.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
             }
         });
 
@@ -106,18 +183,15 @@
             }
         });
 
-        // Fallback: Refresh the QR code image every 20 seconds
+        // Refresh button click handler
+        refreshButton.addEventListener('click', () => {
+            updateQRCode();
+        });
+
+        // Fallback: Refresh the QR code image every 30 seconds
         setInterval(() => {
-            fetch('/api/qr-updated')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.lastUpdate > lastUpdate) {
-                        lastUpdate = data.lastUpdate;
-                        updateQRCode();
-                    }
-                })
-                .catch(error => console.error('Error checking QR update:', error));
-        }, 20000);
+            updateQRCode(false);
+        }, 30000);
 
         // Initial update
         updateQRCode();

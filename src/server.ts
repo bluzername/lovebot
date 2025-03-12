@@ -94,7 +94,19 @@ export class Server extends EventEmitter {
     this.whatsappClient.on('qr', (qr) => {
       logger.info('New QR code received, notifying clients');
       this.lastQrUpdate = Date.now();
-      this.io.emit('qr-updated', { timestamp: this.lastQrUpdate });
+      
+      // Notify clients about the QR code update
+      this.io.emit('qr-updated', { 
+        timestamp: this.lastQrUpdate,
+        message: 'QR code has been updated. Please refresh the page to see the new QR code.'
+      });
+      
+      // Force clients to reload the QR code image by adding a timestamp parameter
+      const qrImageUrl = `/qr.png?t=${this.lastQrUpdate}`;
+      this.io.emit('qr-image-updated', { 
+        url: qrImageUrl,
+        timestamp: this.lastQrUpdate
+      });
     });
     
     // Listen for connection events

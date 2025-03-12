@@ -164,14 +164,35 @@ export class WhatsAppClient extends EventEmitter {
       if (qr) {
         // Got QR code, emit event
         this.qrCode = qr;
+        
+        // Generate and save QR code image
+        try {
+          await generateQR(qr);
+          logger.info('QR code generated and saved successfully');
+        } catch (error) {
+          logger.error('Failed to generate QR code:', error);
+        }
+        
+        // Emit QR event
         this.emit('qr', qr);
         
         // Set up a timer to refresh the QR code
-        if (!this.qrRefreshTimer) {
-          this.qrRefreshTimer = setInterval(() => {
-            this.emit('qr', this.qrCode);
-          }, 30000); // Refresh every 30 seconds
+        if (this.qrRefreshTimer) {
+          clearInterval(this.qrRefreshTimer);
         }
+        
+        this.qrRefreshTimer = setInterval(async () => {
+          if (this.qrCode) {
+            try {
+              // Regenerate QR code to keep it fresh
+              await generateQR(this.qrCode);
+              logger.info('QR code refreshed');
+              this.emit('qr', this.qrCode);
+            } catch (error) {
+              logger.error('Failed to refresh QR code:', error);
+            }
+          }
+        }, 20000); // Refresh every 20 seconds
       }
       
       if (connection === 'close') {
