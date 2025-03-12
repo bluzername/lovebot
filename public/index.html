@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoveBot QR Code</title>
+    <script src="/socket.io/socket.io.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            text-align: center;
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .qr-container {
+            margin: 20px 0;
+        }
+        .qr-container img {
+            max-width: 300px;
+            height: auto;
+        }
+        p {
+            color: #666;
+            margin-top: 20px;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .status.updating {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LoveBot WhatsApp QR Code</h1>
+        <div class="qr-container">
+            <img src="qr.png" alt="WhatsApp QR Code" id="qr-code">
+        </div>
+        <div id="status" class="status disconnected">
+            Waiting for connection...
+        </div>
+        <p>Scan this QR code with your WhatsApp app to connect LoveBot</p>
+        <p id="last-updated">Last updated: Never</p>
+    </div>
+
+    <script>
+        // Connect to Socket.IO server
+        const socket = io();
+        const qrImg = document.getElementById('qr-code');
+        const statusDiv = document.getElementById('status');
+        const lastUpdatedText = document.getElementById('last-updated');
+        let lastUpdate = 0;
+
+        // Function to update QR code
+        function updateQRCode() {
+            qrImg.src = 'qr.png?' + new Date().getTime();
+            lastUpdatedText.textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+            statusDiv.className = 'status updating';
+            statusDiv.textContent = 'QR Code updated. Please scan with WhatsApp.';
+        }
+
+        // Listen for QR code updates
+        socket.on('qr-updated', (data) => {
+            console.log('QR code updated:', data);
+            if (data.timestamp > lastUpdate) {
+                lastUpdate = data.timestamp;
+                updateQRCode();
+            }
+        });
+
+        // Listen for WhatsApp connection status
+        socket.on('whatsapp-connected', (data) => {
+            console.log('WhatsApp connection status:', data);
+            if (data.connected) {
+                statusDiv.className = 'status connected';
+                statusDiv.textContent = 'Connected to WhatsApp!';
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.textContent = 'Disconnected from WhatsApp.';
+            }
+        });
+
+        // Fallback: Refresh the QR code image every 20 seconds
+        setInterval(() => {
+            fetch('/api/qr-updated')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.lastUpdate > lastUpdate) {
+                        lastUpdate = data.lastUpdate;
+                        updateQRCode();
+                    }
+                })
+                .catch(error => console.error('Error checking QR update:', error));
+        }, 20000);
+
+        // Initial update
+        updateQRCode();
+    </script>
+</body>
+</html> 

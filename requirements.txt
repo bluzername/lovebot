@@ -1,0 +1,21 @@
+# Web framework
+fastapi==0.103.1
+uvicorn==0.23.2
+
+# WhatsApp integration
+twilio==8.5.0
+requests==2.31.0
+
+# Database
+motor==3.3.1
+pymongo==4.5.0
+
+# AI/NLP
+spacy==3.6.1
+textblob==0.17.1
+transformers==4.33.2
+nltk==3.8.1
+
+# Utilities
+python-dotenv==1.0.0
+pydantic==2.4.2 

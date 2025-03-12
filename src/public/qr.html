@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LoveBot - Scan QR Code</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f8f9fa;
+      padding-top: 20px;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+    }
+    .card {
+      border-radius: 10px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+    }
+    .card-header {
+      background-color: #25D366;
+      color: white;
+      font-weight: bold;
+      border-radius: 10px 10px 0 0 !important;
+    }
+    .qr-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      min-height: 300px;
+    }
+    .qr-image {
+      max-width: 100%;
+      height: auto;
+    }
+    .btn-primary {
+      background-color: #25D366;
+      border-color: #25D366;
+    }
+    .btn-primary:hover {
+      background-color: #128C7E;
+      border-color: #128C7E;
+    }
+    .status-badge {
+      font-size: 14px;
+      padding: 5px 10px;
+      border-radius: 20px;
+    }
+    .footer {
+      margin-top: 30px;
+      text-align: center;
+      color: #6c757d;
+      font-size: 14px;
+    }
+    .instructions {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="text-center mb-4">
+      <h1>LoveBot - Scan QR Code</h1>
+      <p class="lead">Scan this QR code with your WhatsApp to connect</p>
+    </div>
+
+    <div class="card">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>QR Code</span>
+        <span id="connection-status" class="status-badge badge bg-secondary">Checking...</span>
+      </div>
+      <div class="card-body">
+        <div class="qr-container" id="qr-container">
+          <div class="spinner-border text-success" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+        </div>
+        <div class="d-flex justify-content-between mt-3">
+          <button id="refresh-qr" class="btn btn-sm btn-primary">Refresh QR Code</button>
+          <a href="/" class="btn btn-sm btn-outline-primary">Back to Home</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="instructions">
+      <h5>How to connect:</h5>
+      <ol class="list-group list-group-numbered">
+        <li class="list-group-item">Open WhatsApp on your phone</li>
+        <li class="list-group-item">Tap Menu or Settings and select Linked Devices</li>
+        <li class="list-group-item">Tap on "Link a Device"</li>
+        <li class="list-group-item">Point your phone to this screen to scan the QR code</li>
+      </ol>
+    </div>
+
+    <div class="footer">
+      <p>LoveBot &copy; 2023 - Powered by Baileys and OpenAI</p>
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Check connection status and load QR code on page load
+      checkStatusAndLoadQR();
+
+      // Refresh QR code button
+      document.getElementById('refresh-qr').addEventListener('click', function() {
+        checkStatusAndLoadQR();
+      });
+
+      // Function to check status and load QR code
+      function checkStatusAndLoadQR() {
+        const statusBadge = document.getElementById('connection-status');
+        const qrContainer = document.getElementById('qr-container');
+        
+        statusBadge.textContent = 'Checking...';
+        statusBadge.className = 'status-badge badge bg-secondary';
+        
+        // First check connection status
+        fetch('/api/status')
+          .then(response => response.json())
+          .then(data => {
+            if (data.connected) {
+              // Already connected
+              statusBadge.textContent = 'Connected';
+              statusBadge.className = 'status-badge badge bg-success';
+              qrContainer.innerHTML = `
+                <div class="alert alert-success" role="alert">
+                  <h4 class="alert-heading">Connected!</h4>
+                  <p>Your WhatsApp is already connected. No need to scan QR code.</p>
+                  <hr>
+                  <p class="mb-0">You can now go back to the home page and start using the bot.</p>
+                </div>
+              `;
+            } else if (data.qrAvailable) {
+              // QR code available, load it
+              statusBadge.textContent = 'QR Ready';
+              statusBadge.className = 'status-badge badge bg-warning';
+              loadQRCode();
+            } else {
+              // Waiting for QR code
+              statusBadge.textContent = 'Waiting for QR';
+              statusBadge.className = 'status-badge badge bg-info';
+              qrContainer.innerHTML = `
+                <div class="alert alert-info" role="alert">
+                  <h4 class="alert-heading">Waiting for QR Code</h4>
+                  <p>The system is initializing. Please wait a moment for the QR code to be generated.</p>
+                  <hr>
+                  <p class="mb-0">This page will automatically refresh when the QR code is ready.</p>
+                </div>
+              `;
+              // Check again in 5 seconds
+              setTimeout(checkStatusAndLoadQR, 5000);
+            }
+          })
+          .catch(error => {
+            statusBadge.textContent = 'Error';
+            statusBadge.className = 'status-badge badge bg-danger';
+            qrContainer.innerHTML = `
+              <div class="alert alert-danger" role="alert">
+                <h4 class="alert-heading">Error</h4>
+                <p>Failed to check connection status: ${error.message}</p>
+                <hr>
+                <p class="mb-0">Please try refreshing the page.</p>
+              </div>
+            `;
+          });
+      }
+
+      // Function to load QR code
+      function loadQRCode() {
+        const qrContainer = document.getElementById('qr-container');
+        
+        // Add timestamp to prevent caching
+        const timestamp = new Date().getTime();
+        const qrImageUrl = `/api/qr-image?t=${timestamp}`;
+        
+        // Create image element
+        const img = new Image();
+        img.src = qrImageUrl;
+        img.className = 'qr-image';
+        img.alt = 'WhatsApp QR Code';
+        
+        // Handle loading and errors
+        img.onload = function() {
+          qrContainer.innerHTML = '';
+          qrContainer.appendChild(img);
+        };
+        
+        img.onerror = function() {
+          qrContainer.innerHTML = `
+            <div class="alert alert-danger" role="alert">
+              <h4 class="alert-heading">QR Code Not Available</h4>
+              <p>Failed to load QR code image. Please try refreshing.</p>
+            </div>
+          `;
+        };
+      }
+
+      // Check status every 10 seconds
+      setInterval(checkStatusAndLoadQR, 10000);
+    });
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html> 
