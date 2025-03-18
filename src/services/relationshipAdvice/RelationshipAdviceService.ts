@@ -6,6 +6,7 @@ import { MessageAnalyzer } from './MessageAnalyzer';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import { ChatHistoryImporter } from '../chatHistoryImporter';
+import path from 'path';
 
 // Load environment variables
 dotenv.config();
@@ -304,10 +305,16 @@ export class RelationshipAdviceService {
         return "Error: Could not identify the chat.";
       }
       
+      // Get file extension
+      const ext = path.extname(filePath).toLowerCase();
+      if (ext !== '.txt' && ext !== '.zip') {
+        return "Please send a text file (.txt) or a ZIP archive (.zip) containing your WhatsApp chat export.";
+      }
+      
       // Check if this is a WhatsApp export file
       const isWhatsAppExport = await this.chatHistoryImporter.isWhatsAppExport(filePath);
       if (!isWhatsAppExport) {
-        return "The file you sent doesn't appear to be a WhatsApp chat export. Please export your chat history and send it as a text file.";
+        return "The file you sent doesn't appear to be a WhatsApp chat export. Please export your chat history and send it as a text file or in a ZIP archive.";
       }
       
       // Process the file
@@ -319,7 +326,7 @@ export class RelationshipAdviceService {
       return `✅ Successfully imported your chat history!\n\n${summary}\n\nI'll use this information to provide more personalized relationship advice. Your privacy is important - this data is only used to help you and is not shared with anyone else.`;
     } catch (error) {
       logger.error('Error processing file message:', error);
-      return "Sorry, I encountered an error while processing your chat history file. Please make sure you're sending a valid WhatsApp chat export file.";
+      return "Sorry, I encountered an error while processing your chat history file. Please make sure you're sending a valid WhatsApp chat export file (.txt) or a ZIP archive containing one.";
     }
   }
 } 

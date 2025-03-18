@@ -4,6 +4,8 @@ import { createReadStream } from 'fs';
 import { createInterface } from 'readline';
 import pino from 'pino';
 import { ContextManager } from './relationshipAdvice/ContextManager';
+import AdmZip from 'adm-zip';
+import os from 'os';
 
 // Create logger
 const logger = pino({
@@ -55,21 +57,127 @@ export class ChatHistoryImporter {
       
       // Check file extension
       const ext = path.extname(filePath).toLowerCase();
-      if (ext !== '.txt') {
-        throw new Error(`Unsupported file format: ${ext}. Only .txt files are supported.`);
+      
+      if (ext === '.zip') {
+        // Handle ZIP file
+        return await this.processZipFile(filePath, chatId);
+      } else if (ext === '.txt') {
+        // Handle TXT file
+        const messages = await this.parseExportFile(filePath);
+        logger.info(`Parsed ${messages.length} messages from export file`);
+        
+        // Add messages to context
+        await this.addMessagesToContext(messages, chatId);
+        
+        return messages.length;
+      } else {
+        throw new Error(`Unsupported file format: ${ext}. Only .txt and .zip files are supported.`);
       }
-      
-      // Parse the file
-      const messages = await this.parseExportFile(filePath);
-      logger.info(`Parsed ${messages.length} messages from export file`);
-      
-      // Add messages to context
-      await this.addMessagesToContext(messages, chatId);
-      
-      return messages.length;
     } catch (error) {
       logger.error('Error processing chat export file:', error);
       throw error;
+    }
+  }
+  
+  /**
+   * Process a ZIP file containing WhatsApp chat export(s)
+   * @param zipFilePath Path to the ZIP file
+   * @param chatId The chat ID to associate this history with
+   * @returns Promise that resolves with the number of messages processed
+   */
+  private async processZipFile(zipFilePath: string, chatId: string): Promise<number> {
+    logger.info(`Processing ZIP file: ${zipFilePath}`);
+    
+    try {
+      // Create a temporary directory to extract files
+      const tempDir = path.join(os.tmpdir(), `whatsapp_export_${Date.now()}`);
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      
+      // Open the ZIP file
+      const zip = new AdmZip(zipFilePath);
+      
+      // Extract all entries
+      zip.extractAllTo(tempDir, true);
+      
+      // Find all TXT files in the extracted directory
+      const txtFiles: string[] = [];
+      const findTxtFiles = (dir: string) => {
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+          const filePath = path.join(dir, file);
+          const stat = fs.statSync(filePath);
+          if (stat.isDirectory()) {
+            findTxtFiles(filePath);
+          } else if (path.extname(file).toLowerCase() === '.txt') {
+            txtFiles.push(filePath);
+          }
+        }
+      };
+      
+      findTxtFiles(tempDir);
+      
+      // Process each TXT file
+      let totalMessages = 0;
+      let processedFiles = 0;
+      
+      for (const txtFile of txtFiles) {
+        // Check if this is a WhatsApp export
+        const isWhatsAppExport = await this.isWhatsAppExport(txtFile);
+        if (isWhatsAppExport) {
+          const messages = await this.parseExportFile(txtFile);
+          logger.info(`Parsed ${messages.length} messages from ZIP file entry: ${path.basename(txtFile)}`);
+          
+          // Add messages to context (only if messages were found)
+          if (messages.length > 0) {
+            await this.addMessagesToContext(messages, chatId);
+            totalMessages += messages.length;
+            processedFiles++;
+          }
+        }
+      }
+      
+      // Clean up temporary directory
+      this.cleanupTempDir(tempDir);
+      
+      if (processedFiles === 0) {
+        throw new Error('No valid WhatsApp chat export files found in the ZIP archive.');
+      }
+      
+      logger.info(`Processed ${processedFiles} files with a total of ${totalMessages} messages from ZIP archive`);
+      return totalMessages;
+    } catch (error) {
+      logger.error('Error processing ZIP file:', error);
+      throw error;
+    }
+  }
+  
+  /**
+   * Clean up temporary directory
+   * @param tempDir Path to the temporary directory
+   */
+  private cleanupTempDir(tempDir: string) {
+    try {
+      // Delete all files and subdirectories
+      const deleteDir = (dir: string) => {
+        if (fs.existsSync(dir)) {
+          fs.readdirSync(dir).forEach((file) => {
+            const curPath = path.join(dir, file);
+            if (fs.lstatSync(curPath).isDirectory()) {
+              deleteDir(curPath);
+            } else {
+              fs.unlinkSync(curPath);
+            }
+          });
+          fs.rmdirSync(dir);
+        }
+      };
+      
+      deleteDir(tempDir);
+      logger.debug(`Cleaned up temporary directory: ${tempDir}`);
+    } catch (error) {
+      logger.warn(`Error cleaning up temporary directory: ${error}`);
     }
   }
   
@@ -238,7 +346,48 @@ export class ChatHistoryImporter {
       
       // Check file extension
       const ext = path.extname(filePath).toLowerCase();
-      if (ext !== '.txt') {
+      if (ext === '.zip') {
+        // For ZIP files, we'll extract and check the contents
+        try {
+          const zip = new AdmZip(filePath);
+          const entries = zip.getEntries();
+          
+          // Look for .txt files in the ZIP
+          const txtEntries = entries.filter(entry => 
+            !entry.isDirectory && path.extname(entry.name).toLowerCase() === '.txt'
+          );
+          
+          if (txtEntries.length === 0) {
+            logger.debug('ZIP file does not contain any .txt files');
+            return false;
+          }
+          
+          // Check the first few text files
+          for (const entry of txtEntries.slice(0, 3)) {  // Check up to 3 txt files
+            const entryData = entry.getData().toString('utf8');
+            const lines = entryData.split('\n').slice(0, 10);  // Check first 10 lines
+            
+            let matchCount = 0;
+            const whatsAppFormatRegex = /^\[(\d{1,2}\/\d{1,2}\/\d{2,4}),\s*(\d{1,2}:\d{2}(?::\d{2})?\s*(?:AM|PM)?)\]\s*([^:]+):\s*(.+)$/i;
+            
+            for (const line of lines) {
+              if (whatsAppFormatRegex.test(line)) {
+                matchCount++;
+              }
+            }
+            
+            // If at least 3 of the first 10 lines match, consider it a WhatsApp export
+            if (matchCount >= 3) {
+              return true;
+            }
+          }
+          
+          return false;
+        } catch (error) {
+          logger.error('Error checking ZIP file for WhatsApp exports:', error);
+          return false;
+        }
+      } else if (ext !== '.txt') {
         return false;
       }
       
