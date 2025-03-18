@@ -1,0 +1,12 @@
+[12/05/2023, 10:15:30] John: Hey, how are you doing?
+[12/05/2023, 10:16:45] Sarah: I'm good! Just finished my exams.
+[12/05/2023, 10:17:20] John: That's great! How did they go?
+[12/05/2023, 10:18:05] Sarah: Pretty well, I think. I'm just glad they're over.
+[12/05/2023, 10:18:30] John: I bet! Want to grab coffee this weekend?
+[12/05/2023, 10:19:15] Sarah: Sure, that sounds nice. Saturday afternoon?
+[12/05/2023, 10:20:00] John: Perfect. Let's meet at the usual place at 2pm.
+[12/05/2023, 10:20:45] Sarah: Sounds good! See you then.
+[12/05/2023, 10:21:30] John: Looking forward to it! 😊
+[12/05/2023, 10:22:15] Sarah: <Media omitted>
+[12/05/2023, 10:23:00] John: Nice photo! Is that from your trip last month?
+[12/05/2023, 10:23:45] Sarah: Yes, it was amazing. I'll show you more pictures when we meet. 

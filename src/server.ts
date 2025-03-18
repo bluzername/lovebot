@@ -7,6 +7,7 @@ import { setupRoutes } from './controllers/routes';
 import http from 'http';
 import { Server as SocketServer } from 'socket.io';
 import fs from 'fs';
+import multer from 'multer';
 
 // Create logger
 const logger = pino({
@@ -42,6 +43,37 @@ export class Server extends EventEmitter {
   }
 
   private setupServer() {
+    // Configure multer for file uploads
+    const storage = multer.diskStorage({
+      destination: (req, file, cb) => {
+        const downloadsDir = path.join(process.cwd(), 'downloads');
+        if (!fs.existsSync(downloadsDir)) {
+          fs.mkdirSync(downloadsDir, { recursive: true });
+        }
+        cb(null, downloadsDir);
+      },
+      filename: (req, file, cb) => {
+        const timestamp = Date.now();
+        const originalName = file.originalname;
+        cb(null, `upload_${timestamp}_${originalName}`);
+      }
+    });
+    
+    const upload = multer({ 
+      storage,
+      limits: {
+        fileSize: 10 * 1024 * 1024, // 10MB max file size
+      },
+      fileFilter: (req, file, cb) => {
+        // Accept only text files for chat exports
+        if (file.mimetype === 'text/plain' || file.originalname.endsWith('.txt')) {
+          cb(null, true);
+        } else {
+          cb(null, false);
+        }
+      }
+    });
+    
     // Middleware
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
@@ -62,6 +94,47 @@ export class Server extends EventEmitter {
     // API endpoint to check if QR code has been updated
     this.app.get('/api/qr-updated', (req, res) => {
       res.json({ lastUpdate: this.lastQrUpdate });
+    });
+    
+    // API endpoint for file uploads
+    this.app.post('/api/upload-chat', upload.single('chatFile'), async (req, res) => {
+      try {
+        if (!req.file) {
+          return res.status(400).json({ 
+            success: false, 
+            message: 'No file uploaded or invalid file type. Please upload a text file (.txt).' 
+          });
+        }
+        
+        const filePath = req.file.path;
+        const chatId = req.body.chatId || 'web-upload';
+        
+        // Create a mock message for processing
+        const mockMessage = {
+          key: {
+            remoteJid: chatId,
+            fromMe: false,
+            id: `web-upload-${Date.now()}`
+          },
+          messageTimestamp: Date.now()
+        };
+        
+        // Process the file
+        const response = await this.whatsappClient.processUploadedChatFile(mockMessage, filePath);
+        
+        res.json({ 
+          success: true, 
+          message: 'File processed successfully',
+          response
+        });
+      } catch (error) {
+        logger.error('Error processing uploaded file:', error);
+        res.status(500).json({ 
+          success: false, 
+          message: 'Error processing file',
+          error: (error as Error).message
+        });
+      }
     });
     
     // Copy QR code from root to public directory if it exists

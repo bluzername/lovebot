@@ -31,6 +31,8 @@ interface ConversationContext {
   lastUpdated: number;
   summary?: string;
   relationshipProfile?: RelationshipProfile;
+  importedChatHistory?: string;
+  lastImportTimestamp?: string;
 }
 
 interface RelationshipProfile {
@@ -166,6 +168,23 @@ export class ContextManager {
       }
       
       formattedContext += '\n';
+    }
+    
+    // Add imported chat history summary if available
+    if (context.importedChatHistory) {
+      const lines = context.importedChatHistory.split('\n').filter(line => line.trim() !== '');
+      formattedContext += `Imported Chat History: ${lines.length} messages from previous conversations\n\n`;
+      
+      // Add a sample of the imported chat history (last 10 messages)
+      if (lines.length > 0) {
+        formattedContext += 'Sample of Imported Chat History:\n';
+        const sampleSize = Math.min(10, lines.length);
+        const sampleLines = lines.slice(-sampleSize);
+        for (const line of sampleLines) {
+          formattedContext += `${line}\n`;
+        }
+        formattedContext += '\n';
+      }
     }
     
     // Add conversation summary if available
@@ -331,6 +350,38 @@ export class ContextManager {
       logger.info(`Saved ${this.contexts.size} conversation contexts`);
     } catch (error) {
       logger.error('Error saving contexts:', error);
+    }
+  }
+
+  /**
+   * Updates the context with additional data
+   * @param jid The chat JID
+   * @param data The data to update
+   */
+  public async updateContext(jid: string, data: Partial<ConversationContext>): Promise<void> {
+    try {
+      // Get or create context for this chat
+      let context = this.contexts.get(jid);
+      if (!context) {
+        context = {
+          messages: [],
+          lastUpdated: Date.now(),
+        };
+        this.contexts.set(jid, context);
+      }
+      
+      // Update context with new data
+      Object.assign(context, data);
+      
+      // Update timestamp
+      context.lastUpdated = Date.now();
+      
+      // Save contexts
+      this.saveContexts();
+      
+      logger.info(`Updated context for ${jid} with new data`);
+    } catch (error) {
+      logger.error('Error updating context:', error);
     }
   }
 } 

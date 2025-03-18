@@ -8,7 +8,8 @@ import makeWASocket, {
   WAMessage,
   WAMessageContent,
   BinaryNode,
-  WASocket
+  WASocket,
+  downloadMediaMessage
 } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
@@ -19,6 +20,7 @@ import { processMessage } from '../services/messageHandler';
 import { generateQR } from '../utils/qrcode';
 import { EventEmitter } from 'events';
 import { RelationshipAdviceService } from '../services/relationshipAdvice';
+import path from 'path';
 
 // Create logger
 const logger = pino({
@@ -332,6 +334,9 @@ export class WhatsAppClient extends EventEmitter {
       
       // Extract message text with more comprehensive content handling
       let textContent = '';
+      let isFileMessage = false;
+      let fileType = '';
+      let fileName = '';
       
       if (message.message?.conversation) {
         textContent = message.message.conversation;
@@ -342,12 +347,21 @@ export class WhatsAppClient extends EventEmitter {
       } else if (message.message?.imageMessage?.caption) {
         textContent = message.message.imageMessage.caption;
         console.log('📋 DEBUG: Found image message with caption');
+        isFileMessage = true;
+        fileType = 'image';
       } else if (message.message?.videoMessage?.caption) {
         textContent = message.message.videoMessage.caption;
         console.log('📋 DEBUG: Found video message with caption');
-      } else if (message.message?.documentMessage?.caption) {
-        textContent = message.message.documentMessage.caption;
-        console.log('📋 DEBUG: Found document message with caption');
+        isFileMessage = true;
+        fileType = 'video';
+      } else if (message.message?.documentMessage) {
+        if (message.message.documentMessage.caption) {
+          textContent = message.message.documentMessage.caption;
+        }
+        isFileMessage = true;
+        fileType = 'document';
+        fileName = message.message.documentMessage.fileName || 'unknown_file';
+        console.log(`📋 DEBUG: Found document message: ${fileName}`);
       } else if (message.message?.buttonsResponseMessage?.selectedButtonId) {
         textContent = message.message.buttonsResponseMessage.selectedButtonId;
         console.log('📋 DEBUG: Found buttons response message');
@@ -369,6 +383,17 @@ export class WhatsAppClient extends EventEmitter {
       
       // Process message
       logger.info(`Processing incoming message from ${jid}: "${textContent}"`);
+      
+      // Check if this is a file message that might be a chat export
+      if (isFileMessage && fileType === 'document' && this.relationshipAdviceService) {
+        // Check if the file might be a chat export
+        const fileExtension = fileName.split('.').pop()?.toLowerCase();
+        if (fileExtension === 'txt') {
+          await this.handlePossibleChatExport(message);
+          return;
+        }
+      }
+      
       try {
         if (this.sock) {
           // Check if message is a command
@@ -419,6 +444,67 @@ export class WhatsAppClient extends EventEmitter {
     } catch (error) {
       logger.error('Error handling incoming message:', error);
       console.log('❌ Error handling incoming message');
+    }
+  }
+
+  /**
+   * Handles a possible chat export file
+   * @param message The message containing the document
+   */
+  private async handlePossibleChatExport(message: WAMessage): Promise<void> {
+    try {
+      if (!this.sock || !message.key.remoteJid) return;
+      
+      logger.info('Handling possible chat export file');
+      
+      // Send acknowledgment message
+      await this.sock.sendMessage(message.key.remoteJid, {
+        text: "I'm checking your file to see if it's a chat export... This may take a moment."
+      });
+      
+      // Create directory for downloads if it doesn't exist
+      const downloadsDir = path.join(process.cwd(), 'downloads');
+      if (!fs.existsSync(downloadsDir)) {
+        fs.mkdirSync(downloadsDir, { recursive: true });
+      }
+      
+      // Download the file
+      const buffer = await downloadMediaMessage(
+        message,
+        'buffer',
+        {},
+        {
+          logger,
+          reuploadRequest: this.sock.updateMediaMessage
+        }
+      );
+      
+      // Generate a unique filename
+      const timestamp = new Date().getTime();
+      const filePath = path.join(downloadsDir, `chat_export_${timestamp}.txt`);
+      
+      // Save the file
+      fs.writeFileSync(filePath, buffer);
+      logger.info(`Saved file to ${filePath}`);
+      
+      // Process the file with the relationship advice service
+      if (this.relationshipAdviceService) {
+        const response = await this.relationshipAdviceService.processFileMessage(message, filePath);
+        
+        // Send response
+        await this.sock.sendMessage(message.key.remoteJid, {
+          text: response
+        });
+      }
+    } catch (error) {
+      logger.error('Error handling possible chat export:', error);
+      
+      // Send error message
+      if (this.sock && message.key.remoteJid) {
+        await this.sock.sendMessage(message.key.remoteJid, {
+          text: "Sorry, I encountered an error while processing your file. Please make sure you're sending a valid WhatsApp chat export file."
+        });
+      }
     }
   }
 
@@ -1051,7 +1137,7 @@ export class WhatsAppClient extends EventEmitter {
       }
       
       // Create welcome message based on preferred language
-      const welcomeMessage = this.getWelcomeMessage(preferredLanguage, isGroup);
+      const welcomeMessage = this.getWelcomeMessage(isGroup);
       
       // Send the welcome message
       await this.sendMessage(chatId, welcomeMessage);
@@ -1096,80 +1182,65 @@ export class WhatsAppClient extends EventEmitter {
   }
 
   /**
-   * Gets the welcome message in the specified language
-   * @param language The language code
-   * @param isGroup Whether this is a group chat
+   * Gets the welcome message for a chat
+   * @param isGroup Whether the chat is a group
    * @returns The welcome message
    */
-  private getWelcomeMessage(language: string, isGroup: boolean): string {
-    const groupContext = isGroup ? 
-      {
-        en: 'this group',
-        es: 'este grupo',
-        he: 'קבוצה זו',
-        th: 'กลุ่มนี้'
-      } : 
-      {
-        en: 'our conversation',
-        es: 'nuestra conversación',
-        he: 'השיחה שלנו',
-        th: 'การสนทนาของเรา'
-      };
+  private getWelcomeMessage(isGroup: boolean): string {
+    const botName = process.env.BOT_NAME || 'LoveBot';
+    
+    // Base welcome message
+    let message = `👋 Hello! I'm ${botName}, your relationship advice assistant.\n\n`;
+    
+    if (isGroup) {
+      message += `I'm here to provide relationship advice in this group. You can interact with me in a few ways:\n\n`;
+    } else {
+      message += `I'm here to provide personalized relationship advice. You can interact with me in a few ways:\n\n`;
+    }
+    
+    // Add command information
+    message += `🔹 Start your message with "&" (e.g., "& I'm having trouble with my partner")\n`;
+    message += `🔹 Mention "LoveBot" in your message\n`;
+    message += `🔹 Simply discuss relationship topics, and I'll respond if I can help\n\n`;
+    
+    // Add language support information
+    message += `I support multiple languages including English, Spanish, Hebrew, and Thai.\n\n`;
+    
+    // Add chat history sharing information
+    message += `📋 Share your chat history for better advice:\n`;
+    message += `1. Open the chat with your partner\n`;
+    message += `2. Tap the three dots (⋮) > More > Export chat\n`;
+    message += `3. Choose "Without Media"\n`;
+    message += `4. Send the exported file to me\n`;
+    message += `5. I'll analyze it to provide more personalized advice\n\n`;
+    
+    // Add privacy note
+    message += `🔒 Your privacy is important - all data is used only to help you and is not shared with anyone else.`;
+    
+    return message;
+  }
 
-    const messages = {
-      en: `👋 Hello! I'm LoveBot, your relationship advice assistant.
-
-I can help with relationship questions and advice. Here's how to use me:
-
-In ${groupContext.en}:
-- Start your message with "&" (e.g., "& I'm having trouble with my partner")
-- Mention "LoveBot" in your message
-- Simply discuss relationship topics (I'll respond if relevant)
-
-I support multiple languages including English, Spanish, Hebrew, and Thai.
-
-Thank you for adding me! I'm here to help with your relationship questions. 💕`,
-
-      es: `👋 ¡Hola! Soy LoveBot, tu asistente de consejos para relaciones.
-
-Puedo ayudarte con preguntas y consejos sobre relaciones. Así es como puedes usarme:
-
-En ${groupContext.es}:
-- Comienza tu mensaje con "&" (ej., "& Estoy teniendo problemas con mi pareja")
-- Menciona "LoveBot" en tu mensaje
-- Simplemente habla sobre temas de relaciones (responderé si es relevante)
-
-Soporto múltiples idiomas incluyendo inglés, español, hebreo y tailandés.
-
-¡Gracias por agregarme! Estoy aquí para ayudarte con tus preguntas sobre relaciones. 💕`,
-
-      he: `👋 שלום! אני LoveBot, עוזר הייעוץ לזוגיות שלך.
-
-אני יכול לעזור עם שאלות וייעוץ בנושא מערכות יחסים. הנה איך להשתמש בי:
-
-ב${groupContext.he}:
-- התחל את ההודעה שלך עם "&" (לדוגמה, "& יש לי קשיים עם בן/בת הזוג שלי")
-- הזכר את "LoveBot" בהודעה שלך
-- פשוט דבר על נושאי מערכות יחסים (אני אגיב אם זה רלוונטי)
-
-אני תומך במספר שפות כולל אנגלית, ספרדית, עברית ותאילנדית.
-
-תודה שהוספת אותי! אני כאן כדי לעזור עם שאלות על מערכות יחסים שלך. 💕`,
-
-      th: `👋 สวัสดี! ฉันคือ LoveBot ผู้ช่วยให้คำปรึกษาด้านความสัมพันธ์ของคุณ
-
-ฉันสามารถช่วยตอบคำถามและให้คำแนะนำเกี่ยวกับความสัมพันธ์ นี่คือวิธีใช้งานฉัน:
-
-ใน${groupContext.th}:
-- เริ่มข้อความของคุณด้วย "&" (เช่น "& ฉันกำลังมีปัญหากับคู่ของฉัน")
-- กล่าวถึง "LoveBot" ในข้อความของคุณ
-- พูดคุยเกี่ยวกับหัวข้อความสัมพันธ์ (ฉันจะตอบกลับหากเกี่ยวข้อง)
-
-ฉันรองรับหลายภาษารวมถึงอังกฤษ สเปน ฮีบรู และไทย
-
-ขอบคุณที่เพิ่มฉัน! ฉันพร้อมช่วยเหลือคุณเกี่ยวกับคำถามด้านความสัมพันธ์ 💕`
-    };
-
-    return messages[language as keyof typeof messages] || messages.en;
+  /**
+   * Processes an uploaded chat file from the web interface
+   * @param mockMessage A mock message object with necessary properties
+   * @param filePath Path to the uploaded file
+   * @returns Response message about the import status
+   */
+  public async processUploadedChatFile(mockMessage: any, filePath: string): Promise<string> {
+    try {
+      logger.info(`Processing uploaded chat file: ${filePath}`);
+      
+      if (!this.relationshipAdviceService) {
+        return "Error: Relationship advice service is not available.";
+      }
+      
+      // Process the file with the relationship advice service
+      const response = await this.relationshipAdviceService.processFileMessage(mockMessage, filePath);
+      
+      return response;
+    } catch (error) {
+      logger.error('Error processing uploaded chat file:', error);
+      return "Sorry, I encountered an error while processing your chat history file. Please make sure you're sending a valid WhatsApp chat export file.";
+    }
   }
 } 

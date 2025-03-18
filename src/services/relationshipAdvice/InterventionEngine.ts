@@ -22,6 +22,9 @@ export enum InterventionType {
   RESPOND_IN_CHAT = 'respond_in_chat',
   RESPOND_PRIVATELY = 'respond_privately',
   PROACTIVE_ADVICE = 'proactive_advice',
+  DIRECT_REQUEST = 'direct_request',
+  RELATIONSHIP_DISCUSSION = 'relationship_discussion',
+  EMOTIONAL_SUPPORT = 'emotional_support',
 }
 
 // Define intervention decision result

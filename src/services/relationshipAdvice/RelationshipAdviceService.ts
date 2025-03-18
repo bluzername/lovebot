@@ -5,6 +5,7 @@ import { InterventionEngine, InterventionType } from './InterventionEngine';
 import { MessageAnalyzer } from './MessageAnalyzer';
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
+import { ChatHistoryImporter } from '../chatHistoryImporter';
 
 // Load environment variables
 dotenv.config();
@@ -34,6 +35,7 @@ export class RelationshipAdviceService {
   private messageAnalyzer: MessageAnalyzer;
   private contextManager: ContextManager;
   private interventionEngine: InterventionEngine;
+  private chatHistoryImporter: ChatHistoryImporter;
   private readonly model: string;
   private readonly maxTokens: number = 500;
 
@@ -41,6 +43,7 @@ export class RelationshipAdviceService {
     this.messageAnalyzer = new MessageAnalyzer();
     this.contextManager = new ContextManager();
     this.interventionEngine = new InterventionEngine(this.messageAnalyzer, this.contextManager, disableInterventionInterval);
+    this.chatHistoryImporter = new ChatHistoryImporter(this.contextManager);
     this.model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
     
     logger.info(`Initialized RelationshipAdviceService with model: ${this.model}`);
@@ -164,7 +167,9 @@ export class RelationshipAdviceService {
    * @returns The system prompt
    */
   private createSystemPrompt(interventionType: InterventionType): string {
-    let prompt = 'You are LoveBot, a compassionate and insightful relationship advisor on WhatsApp. ';
+    let prompt = 'You are LoveBot, a relationship advisor inspired by Esther Perel\'s approach. ';
+    prompt += 'Like Esther, you are wise, direct, and insightful about the complexities of human relationships. ';
+    prompt += 'You possess her ability to cut through surface issues to identify deeper relationship dynamics. ';
     
     if (interventionType === InterventionType.RESPOND_IN_CHAT) {
       prompt += 'You are responding in a group chat where everyone can see your message. ';
@@ -173,17 +178,23 @@ export class RelationshipAdviceService {
       prompt += 'You are responding privately to someone who needs relationship advice. ';
       prompt += 'You can be more direct and personal in your advice. ';
     } else if (interventionType === InterventionType.PROACTIVE_ADVICE) {
-      prompt += 'You are proactively offering relationship advice based on observed conversation patterns. ';
-      prompt += 'Be gentle and non-judgmental in your approach. ';
+      prompt += 'You are proactively offering relationship insights based on observed conversation patterns. ';
+      prompt += 'Be gentle yet direct in your approach. ';
     }
     
-    prompt += 'Your goal is to provide helpful, empathetic, and constructive relationship advice. ';
-    prompt += 'Focus on improving communication, understanding, and emotional connection. ';
-    prompt += 'Avoid being judgmental or taking sides. Instead, help people understand each other\'s perspectives. ';
-    prompt += 'Keep your responses concise and practical. ';
+    prompt += 'Your goal is to foster open and nonviolent communication between partners. ';
+    prompt += 'Like Esther Perel, you understand that passion and security often pull in opposite directions, ';
+    prompt += 'and that the erotic and domestic aspects of relationships create natural tensions. ';
+    prompt += 'Help people understand that conflicts often arise from unspoken expectations and unresolved past experiences. ';
+    prompt += 'Be direct but compassionate, and don\'t shy away from difficult truths. ';
+    prompt += 'Encourage curiosity about one\'s partner rather than assumptions. ';
+    prompt += 'Focus on the space between people - the relationship itself - rather than simply on individual behaviors. ';
+    prompt += 'Keep your responses concise, thought-provoking, and practical. ';
+    prompt += 'Use occasional powerful questions to prompt reflection. ';
     prompt += 'Do not disclose that you are an AI - simply respond as LoveBot, the relationship advisor. ';
     prompt += 'You are multilingual and can detect the language of the message. Always respond in the same language as the message you received. ';
     prompt += 'You support English, Spanish, Hebrew, Thai, and other languages. ';
+    prompt += 'IMPORTANT: Do NOT quote the user\'s message in your response. They can see their own message, so quoting it is redundant and makes you seem like a bot. Just respond directly to their question or concern. ';
     
     return prompt;
   }
@@ -202,46 +213,53 @@ export class RelationshipAdviceService {
     context: string,
     interventionType: InterventionType
   ): string {
-    let prompt = '';
-    
-    // Add context
-    prompt += 'CONVERSATION CONTEXT:\n';
-    prompt += context;
-    prompt += '\n\n';
-    
-    // Add current message
-    prompt += 'CURRENT MESSAGE:\n';
-    const sender = message.pushName || (message.key.participant || message.key.remoteJid || 'Unknown').split('@')[0];
-    prompt += `${sender}: ${textContent}\n\n`;
-    
-    // Add instructions based on intervention type
-    prompt += 'INSTRUCTIONS:\n';
-    
-    if (interventionType === InterventionType.RESPOND_IN_CHAT) {
-      prompt += 'Please respond to this message in the group chat. ';
-      prompt += 'Everyone will see your response, so be mindful of privacy and feelings. ';
-    } else if (interventionType === InterventionType.RESPOND_PRIVATELY) {
-      prompt += 'Please respond privately to this person with relationship advice. ';
-      prompt += 'You can be more direct and personal in your advice. ';
-    } else if (interventionType === InterventionType.PROACTIVE_ADVICE) {
-      prompt += 'Please provide proactive relationship advice based on the conversation patterns you observe. ';
-      prompt += 'Be gentle and non-judgmental in your approach. ';
+    // Get the chat ID
+    const jid = message.key.remoteJid;
+    if (!jid) {
+      return `Please analyze this message and provide relationship advice: "${textContent}"`;
     }
     
-    prompt += 'Keep your response concise and practical. ';
-    prompt += 'Focus on improving communication, understanding, and emotional connection. ';
-    prompt += 'Avoid being judgmental or taking sides. ';
-    prompt += 'Do not disclose that you are an AI - simply respond as LoveBot, the relationship advisor. ';
-    prompt += 'Detect the language of the message and respond in the same language. ';
+    // Get the conversation context
+    const conversationContext = this.contextManager.getContext(jid);
     
-    // Add language detection hint
-    prompt += '\nLANGUAGE DETECTION:\n';
-    prompt += 'Analyze the language of the message and respond in the same language. ';
-    prompt += 'If the message is in English, respond in English. ';
-    prompt += 'If the message is in Spanish, respond in Spanish. ';
-    prompt += 'If the message is in Hebrew, respond in Hebrew. ';
-    prompt += 'If the message is in Thai, respond in Thai. ';
-    prompt += 'For any other language, respond in that language if you can, or in English if you cannot.';
+    // Build the prompt
+    let prompt = '';
+    
+    // Add context information
+    prompt += `CONVERSATION CONTEXT:\n${context}\n\n`;
+    
+    // Add information about imported chat history if available
+    if (conversationContext?.importedChatHistory) {
+      const importDate = conversationContext.lastImportTimestamp 
+        ? new Date(conversationContext.lastImportTimestamp).toLocaleString() 
+        : 'unknown date';
+      
+      prompt += `NOTE: The user has shared their chat history with me on ${importDate}. I have access to their previous conversations which gives me better context about their relationship dynamics.\n\n`;
+    }
+    
+    // Add the current message
+    prompt += `CURRENT MESSAGE: "${textContent}"\n\n`;
+    
+    // Add instructions based on intervention type
+    switch (interventionType) {
+      case InterventionType.DIRECT_REQUEST:
+        prompt += 'The user has directly asked for relationship advice. Channel Esther Perel\'s direct, insightful style to address the underlying dynamics at play. Offer a perspective that might reframe their understanding of the situation.';
+        break;
+      case InterventionType.RELATIONSHIP_DISCUSSION:
+        prompt += 'The user is discussing relationship issues. In Esther Perel\'s style, identify potential paradoxes or tensions in their situation. Be direct yet empathetic, and don\'t shy away from challenging assumptions if needed.';
+        break;
+      case InterventionType.EMOTIONAL_SUPPORT:
+        prompt += 'The user appears to be experiencing emotional distress related to their relationship. Offer support while gently shifting perspective, as Esther Perel would, to help them see their situation in a new light. Balance empathy with insight.';
+        break;
+      default:
+        prompt += 'Channeling Esther Perel\'s approach, provide a thoughtful perspective that balances directness with understanding. Consider the cultural and psychological dimensions at play, and be willing to challenge conventional wisdom if appropriate.';
+    }
+    
+    // Add language detection instructions
+    prompt += '\n\nIMPORTANT: Analyze the language of the message and respond in the SAME LANGUAGE. If the message is in English, respond in English. If in Spanish, respond in Spanish. If in Hebrew, respond in Hebrew. If in Thai, respond in Thai. For any other language, try to respond in that language if possible.';
+    
+    // Remind not to quote the user's message
+    prompt += '\n\nREMEMBER: Do NOT quote the user\'s message in your response. Reply directly without repeating what they said. This makes the conversation feel more natural.';
     
     return prompt;
   }
@@ -271,5 +289,37 @@ export class RelationshipAdviceService {
     }
     
     return textContent;
+  }
+
+  /**
+   * Processes a file message that might contain chat history
+   * @param message The WhatsApp message containing the file
+   * @param filePath The path to the downloaded file
+   * @returns A response message about the import status
+   */
+  public async processFileMessage(message: WAMessage, filePath: string): Promise<string> {
+    try {
+      const jid = message.key.remoteJid;
+      if (!jid) {
+        return "Error: Could not identify the chat.";
+      }
+      
+      // Check if this is a WhatsApp export file
+      const isWhatsAppExport = await this.chatHistoryImporter.isWhatsAppExport(filePath);
+      if (!isWhatsAppExport) {
+        return "The file you sent doesn't appear to be a WhatsApp chat export. Please export your chat history and send it as a text file.";
+      }
+      
+      // Process the file
+      const messageCount = await this.chatHistoryImporter.processExportFile(filePath, jid);
+      
+      // Get a summary of the imported chat history
+      const summary = await this.chatHistoryImporter.getImportSummary(jid);
+      
+      return `✅ Successfully imported your chat history!\n\n${summary}\n\nI'll use this information to provide more personalized relationship advice. Your privacy is important - this data is only used to help you and is not shared with anyone else.`;
+    } catch (error) {
+      logger.error('Error processing file message:', error);
+      return "Sorry, I encountered an error while processing your chat history file. Please make sure you're sending a valid WhatsApp chat export file.";
+    }
   }
 } 
