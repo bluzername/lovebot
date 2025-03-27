@@ -3,10 +3,10 @@ import pino from 'pino';
 import { ContextManager } from './ContextManager';
 import { InterventionEngine, InterventionType } from './InterventionEngine';
 import { MessageAnalyzer } from './MessageAnalyzer';
-import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import { ChatHistoryImporter } from '../chatHistoryImporter';
 import path from 'path';
+import { LLMClient } from '../llm/LLMClient';
 
 // Load environment variables
 dotenv.config();
@@ -24,11 +24,6 @@ const logger = pino({
   }
 });
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
 /**
  * Provides relationship advice using AI
  */
@@ -37,7 +32,6 @@ export class RelationshipAdviceService {
   private contextManager: ContextManager;
   private interventionEngine: InterventionEngine;
   private chatHistoryImporter: ChatHistoryImporter;
-  private readonly model: string;
   private readonly maxTokens: number = 500;
 
   constructor(disableInterventionInterval: boolean = false) {
@@ -45,9 +39,9 @@ export class RelationshipAdviceService {
     this.contextManager = new ContextManager();
     this.interventionEngine = new InterventionEngine(this.messageAnalyzer, this.contextManager, disableInterventionInterval);
     this.chatHistoryImporter = new ChatHistoryImporter(this.contextManager);
-    this.model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
     
-    logger.info(`Initialized RelationshipAdviceService with model: ${this.model}`);
+    // Log LLM information
+    logger.info(`Initialized RelationshipAdviceService with ${LLMClient.getProvider()} using model: ${LLMClient.getModel()}`);
   }
 
   /**
@@ -106,7 +100,7 @@ export class RelationshipAdviceService {
   }
 
   /**
-   * Generates advice using OpenAI
+   * Generates advice using the configured LLM
    * @param message The WhatsApp message
    * @param textContent The extracted text content
    * @param recipient The recipient JID
@@ -133,9 +127,12 @@ export class RelationshipAdviceService {
       logger.debug(`System prompt: ${systemPrompt}`);
       logger.debug(`User prompt: ${userPrompt}`);
       
+      // Get the LLM client
+      const llm = LLMClient.getInstance();
+      
       // Generate response
-      const completion = await openai.chat.completions.create({
-        model: this.model,
+      const completion = await llm.chat.completions.create({
+        model: LLMClient.getModel(),
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }

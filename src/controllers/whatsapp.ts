@@ -21,6 +21,7 @@ import { generateQR } from '../utils/qrcode';
 import { EventEmitter } from 'events';
 import { RelationshipAdviceService } from '../services/relationshipAdvice';
 import path from 'path';
+import { LLMClient, LLMProvider } from '../services/llm/LLMClient';
 
 // Create logger
 const logger = pino({
@@ -399,7 +400,7 @@ export class WhatsAppClient extends EventEmitter {
           // Check if message is a command
           if (textContent.startsWith('/')) {
             console.log(`🤖 Processing command: ${textContent}`);
-            await processMessage(this.sock, message);
+            await this.handleCommand(jid, textContent, textContent.split(' '));
           } else {
             // Process with relationship advice service if available
             if (this.relationshipAdviceService && !this.localOnlyMode) {
@@ -411,8 +412,8 @@ export class WhatsAppClient extends EventEmitter {
                 
                 // Send responses
                 for (const response of result.responses) {
-                  await this.sendMessage(response.recipient, response.text);
-                  console.log(`📤 Sent relationship advice to ${response.recipient}`);
+                  await this.sendMessage(jid, response.text);
+                  console.log(`📤 Sent relationship advice to ${jid}`);
                 }
               } else {
                 console.log(`🤐 No relationship advice needed for this message`);
@@ -979,6 +980,10 @@ export class WhatsAppClient extends EventEmitter {
           await this.handleTestAdviceCommand(line);
           break;
           
+        case 'models':
+          await this.handleModelsCommand(line, line.split(' '));
+          break;
+          
         default:
           console.log('Unknown command. Type help for available commands.');
       }
@@ -1001,6 +1006,7 @@ export class WhatsAppClient extends EventEmitter {
     console.log('  testcommands <number> - Run a test suite of commands');
     console.log('  testadvice [--private] [message] - Test relationship advice with a message');
     console.log('  bottest <number> - Test bot-to-bot communication');
+    console.log('  models - Show available LLM models and current configuration');
     console.log('  help - Show this help message');
     console.log('\nRelationship Advice:');
     console.log('  To get relationship advice, you can:');
@@ -1241,6 +1247,45 @@ export class WhatsAppClient extends EventEmitter {
     } catch (error) {
       logger.error('Error processing uploaded chat file:', error);
       return "Sorry, I encountered an error while processing your chat history file. Please make sure you're sending a valid WhatsApp chat export file.";
+    }
+  }
+
+  /**
+   * Handles the 'models' command
+   * @param commandLine The full command line
+   * @param args Command arguments
+   */
+  private async handleModelsCommand(commandLine: string, args: string[]) {
+    try {
+      logger.info('Handling models command');
+      
+      // Get the current provider and model
+      const provider = LLMClient.getProvider();
+      const currentModel = LLMClient.getModel();
+      
+      // Get available models
+      const availableModels = LLMClient.getAvailableModels();
+      
+      // Create response
+      console.log(`\n=== LLM Configuration ===`);
+      console.log(`Provider: ${provider}`);
+      console.log(`Current Model: ${currentModel}`);
+      console.log(`\nAvailable Models:`);
+      
+      Object.entries(availableModels).forEach(([model, description]) => {
+        const marker = model === currentModel ? '* ' : '  ';
+        console.log(`${marker}${model}: ${description}`);
+      });
+      
+      console.log(`\nTo change models, update your .env file:`);
+      if (provider === LLMProvider.OPENAI) {
+        console.log('OPENAI_MODEL=model_name');
+      } else if (provider === LLMProvider.OPENROUTER) {
+        console.log('OPENROUTER_MODEL=model_name');
+      }
+    } catch (error) {
+      logger.error('Error handling models command:', error);
+      console.log('Error retrieving model information');
     }
   }
 } 
