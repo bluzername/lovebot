@@ -4,11 +4,6 @@ import { Server } from './server';
 import { LLMClient } from './services/llm/LLMClient';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
-
-// Import crypto polyfill first to ensure it's available
-// Ensure crypto is available globally
-// global.crypto = crypto as any; // This line causes issues
 
 // Import the ChatHistoryImporter and ContextManager for test-chat-import
 import { ChatHistoryImporter } from './services/chatHistoryImporter';

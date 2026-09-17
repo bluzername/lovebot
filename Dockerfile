@@ -1,22 +1,36 @@
-FROM node:18-slim
+# Build stage: install all dependencies (including TypeScript) and compile
+FROM node:22-slim AS build
 
 WORKDIR /app
 
-# Copy package files first for better caching
-COPY package*.json ./
+COPY package.json package-lock.json ./
+RUN npm ci
 
-# Install all dependencies including dev dependencies
-RUN npm install --include=dev
+COPY tsconfig.json crypto-polyfill.js ./
+COPY src ./src
+RUN npm run build \
+ && mkdir -p dist/public \
+ && cp -r src/public/. dist/public/
 
-# Copy the rest of the application
-COPY . .
+# Runtime stage: production dependencies only
+FROM node:22-slim
 
-# Build the application
-RUN npm run build
+ENV NODE_ENV=production
+WORKDIR /app
 
-# Expose the port that Render expects
-ENV PORT=10000
-EXPOSE 10000
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
 
-# Start the application
-CMD ["npm", "start"] 
+COPY --from=build /app/dist ./dist
+COPY crypto-polyfill.js ./
+COPY public ./public
+
+# WhatsApp session, conversation contexts and uploads live here; mount a
+# volume so a restart does not force a new QR pairing.
+RUN mkdir -p auth_info_lovebot data/contexts downloads
+VOLUME ["/app/auth_info_lovebot", "/app/data"]
+
+ENV PORT=3000
+EXPOSE 3000
+
+CMD ["node", "-r", "./crypto-polyfill.js", "dist/index.js"]
