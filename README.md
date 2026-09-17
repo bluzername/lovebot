@@ -1,119 +1,139 @@
-# LoveBot - Relationship Advice WhatsApp Bot
+# LoveBot
 
-LoveBot is a WhatsApp bot that provides relationship advice using AI. It can analyze messages in multiple languages (English, Spanish, Hebrew, and Thai) and respond with helpful advice when relationship topics are detected.
+WhatsApp bot that gives relationship advice with an LLM. It connects to WhatsApp
+through [Baileys](https://github.com/WhiskeySockets/Baileys) (the unofficial
+multi-device web API), detects relationship topics in English, Spanish, Hebrew
+and Thai, and replies in the language of the message.
 
-## Features
+## What it does
 
-- **Multi-language Support**: Understands and responds in English, Spanish, Hebrew, and Thai
-- **Smart Detection**: Identifies relationship-related messages in group and private chats
-- **Direct Request Symbol**: Use "&" at the start of a message for direct advice in group chats
-- **Welcome Messages**: Automatically sends welcome messages when added to new chats
-- **Local Testing Mode**: Test the bot without connecting to WhatsApp
+- Private chats: every message is analysed and answered.
+- Group chats: replies when a message starts with `&`, mentions the bot name, or
+  scores as relationship-related by keyword analysis.
+- Slash commands over WhatsApp: `/help`, `/ai <prompt>`, `/echo <text>`,
+  `/groups`, `/status`.
+- Chat history import: send a WhatsApp chat export (`.txt` or a `.zip` of
+  exports) to the bot, or `POST /api/upload-chat`, to seed the conversation
+  context that later advice is based on. Contexts persist in `data/contexts/`.
+- Sends a welcome message when added to a group.
+- Small Express server that serves the pairing QR code and a status/send API.
 
-## LLM Configuration
+## Requirements
 
-LoveBot supports multiple LLM providers through a simple configuration. You can easily switch between OpenAI and OpenRouter by updating your `.env` file:
+- Node.js 22 (see `.nvmrc`). Node 18 is EOL and no longer supported.
+- An OpenAI API key, or an OpenRouter API key.
+- A phone with WhatsApp to pair the bot as a linked device.
 
-### Using OpenAI
+## Configuration
 
-```
-LLM_PROVIDER=openai
-OPENAI_API_KEY=your_openai_api_key
-OPENAI_MODEL=gpt-3.5-turbo
-```
+Copy `.env.example` to `.env`. The TypeScript code reads these variables:
 
-### Using OpenRouter
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `LLM_PROVIDER` | no | `openai` | `openai` or `openrouter` |
+| `OPENAI_API_KEY` | when provider is `openai` | - | OpenAI key |
+| `OPENAI_MODEL` | no | `gpt-4o-mini` | OpenAI chat model id |
+| `OPENROUTER_API_KEY` | when provider is `openrouter` | - | OpenRouter key |
+| `OPENROUTER_MODEL` | no | `openai/gpt-4o-mini` | OpenRouter model slug |
+| `OPENROUTER_SITE_URL` | no | repo URL | Sent as `HTTP-Referer` to OpenRouter |
+| `PORT` | no | `3000` | HTTP port for the QR page and API |
+| `LOG_LEVEL` | no | `info` | pino log level |
+| `BOT_NAME` | no | `LoveBot` | Name used in replies and as the Baileys browser name |
 
-[OpenRouter](https://openrouter.ai/) gives you access to various AI models from different providers through a unified API.
+Model defaults live in `src/config.ts`. The process exits at startup with a
+clear message if the key for the selected provider is missing.
 
-```
-LLM_PROVIDER=openrouter
-OPENROUTER_API_KEY=your_openrouter_api_key
-OPENROUTER_MODEL=openai/gpt-3.5-turbo
-OPENROUTER_SITE_URL=https://yourwebsite.com
-```
+## Models
 
-Popular models available through OpenRouter:
-- `openai/gpt-3.5-turbo`: OpenAI's GPT-3.5
-- `openai/gpt-4-turbo`: OpenAI's GPT-4
-- `anthropic/claude-3-opus`: Anthropic's Claude 3 Opus
-- `anthropic/claude-3-sonnet`: Anthropic's Claude 3 Sonnet
-- `meta-llama/llama-3-70b-instruct`: Meta's Llama 3 70B
+Any model id the provider accepts works; set `OPENAI_MODEL` or
+`OPENROUTER_MODEL`. The `models` CLI command prints a curated list
+(`LLMClient.getAvailableModels()`), for example:
 
-Check [OpenRouter's supported models](https://openrouter.ai/docs#models) for a complete list.
+- OpenAI: `gpt-4o-mini` (default), `gpt-5.6-luna`, `gpt-5.6-sol`
+- OpenRouter: `openai/gpt-4o-mini` (default), `anthropic/claude-haiku-4.5`,
+  `anthropic/claude-sonnet-5`, `anthropic/claude-opus-5`,
+  `meta-llama/llama-3.3-70b-instruct`, `mistralai/mistral-small-2603`
 
-## Setup
+## Running locally
 
-### Prerequisites
-
-- Node.js (v14 or higher)
-- npm or yarn
-- OpenAI API key
-
-### Installation
-
-1. Clone the repository:
-   ```
-   git clone https://github.com/yourusername/lovebot.git
-   cd lovebot
-   ```
-
-2. Install dependencies:
-   ```
-   npm install
-   ```
-
-3. Create a `.env` file in the root directory with the following variables:
-   ```
-   OPENAI_API_KEY=your_openai_api_key
-   OPENAI_MODEL=gpt-3.5-turbo
-   LOG_LEVEL=info
-   ```
-
-### Running the Bot
-
-#### Online Mode (WhatsApp Connection)
-
-```
-npm start
+```bash
+npm ci
+cp .env.example .env   # add your key
+npm run dev            # bot + web server from src/ via ts-node
 ```
 
-#### Local Testing Mode (No WhatsApp Connection)
+Other entry points:
 
+| Command | What it does |
+| --- | --- |
+| `npm run build` | Compile `src/` to `dist/` with `tsc` |
+| `npm start` | Run the compiled bot (`dist/index.js`) |
+| `npm run watch` | `npm run dev` with nodemon restarts |
+| `npm run cli` | Interactive CLI (`src/cli.ts`) with the bot connected: `send`, `status`, `testadvice`, `models`, `clearauth`, `help`, ... |
+| `npm run cli:local` | Same CLI in local-only mode: no WhatsApp connection, `testlocal` and `testadvice` exercise the advice pipeline |
+| `npm run typecheck` | `tsc --noEmit` |
+
+### Pairing with WhatsApp (QR flow)
+
+1. Start the bot (`npm run dev`, `npm run cli`, or the Docker image).
+2. The QR code prints in the terminal and is also served at
+   `http://localhost:3000/qr` (image at `/api/qr-image`, JSON at `/api/qr`,
+   status at `/api/status`). The image is written to `qr.png` and
+   `public/qr.png`, both gitignored.
+3. On the phone: WhatsApp > Linked devices > Link a device, scan the code.
+4. Session credentials are stored in `auth_info_lovebot/` (gitignored). Keep
+   that directory to avoid re-pairing; delete it (or run `clearauth` in the CLI)
+   to start a fresh session.
+
+### Smoke scripts
+
+There is no automated test suite. `scripts/smoke/` holds manual scripts that
+call the real LLM (they need a key in `.env`):
+
+| Command | What it does |
+| --- | --- |
+| `npm run smoke:advice` | One direct-request message through `RelationshipAdviceService` |
+| `npm run smoke:comprehensive` | A batch of group/private messages, prints whether each triggered a reply |
+| `npm run smoke:analyzer` | Exercises `MessageAnalyzer`, `ContextManager`, `InterventionEngine` and the service |
+| `npm run smoke:import` | Imports `test_files/sample_chats.zip` into a test context (no LLM call) |
+
+`test_files/` contains synthetic chat exports used by `smoke:import` and by
+`npm run cli -- --test-chat-import <file>`.
+
+## Docker
+
+```bash
+docker build -t lovebot .
+docker run --rm -it \
+  --env-file .env \
+  -p 3000:3000 \
+  -v lovebot-auth:/app/auth_info_lovebot \
+  -v lovebot-data:/app/data \
+  lovebot
 ```
-npm run start:local
-```
 
-## Usage
+The image is a two-stage build on `node:22-slim`: the build stage runs
+`npm ci` and `tsc`, the runtime stage installs production dependencies only and
+runs `node -r ./crypto-polyfill.js dist/index.js`. Open
+`http://localhost:3000/qr` to pair. The volumes keep the WhatsApp session and
+conversation contexts across restarts.
 
-### In Private Chats
-- Simply send any message directly to the bot - all messages are processed
+## CI
 
-### In Group Chats
-1. Start your message with "&" (e.g., "& I'm having trouble with my partner")
-2. Mention "LoveBot" in your message
-3. Simply discuss relationship topics (the bot will respond if relevant)
+`.github/workflows/ci.yml` runs `npm ci`, `tsc --noEmit` and `npm run build`
+on Node 22 for pushes to `main` and pull requests. Dependabot checks npm,
+GitHub Actions and the Docker base image weekly.
 
-## Commands
+## Limitations
 
-- `/help` - Show available commands
-- `/status` - Check connection status
-- `/testadvice [message]` - Test relationship advice with a message
-
-## Development
-
-### Building the Project
-
-```
-npm run build
-```
-
-### Running Tests
-
-```
-npm test
-```
+- Baileys is an unofficial reverse-engineered client. WhatsApp changes can
+  break it without notice, and accounts used with unofficial clients risk being
+  banned. Use a dedicated number.
+- No automated tests; the smoke scripts hit the live LLM API.
+- Topic detection is keyword-based per language, so it misses phrasing outside
+  the dictionaries in `src/services/relationshipAdvice/MessageAnalyzer.ts`.
+- `crypto-polyfill.js` is a no-op on Node 22 (kept for older runtimes only).
 
 ## License
 
-[MIT License](LICENSE) 
+[MIT](LICENSE)
