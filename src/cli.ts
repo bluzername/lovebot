@@ -1,6 +1,7 @@
 import { config } from 'dotenv';
 import { WhatsAppClient } from './controllers/whatsapp';
 import { Server } from './server';
+import { LLMClient } from './services/llm/LLMClient';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -74,6 +75,14 @@ if (testChatImportIndex !== -1 && testChatImportIndex + 1 < args.length) {
   // Run the test
   testChatImport(importFilePath);
 } else {
+  // Fail fast if the LLM provider is not configured (missing API key etc.)
+  try {
+    LLMClient.getInstance();
+  } catch (error) {
+    console.error(`Startup configuration error: ${(error as Error).message}`);
+    process.exit(1);
+  }
+
   // Initialize WhatsApp client
   let whatsappClient: WhatsAppClient;
 

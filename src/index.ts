@@ -10,9 +10,18 @@ import { createServer } from 'http';
 import { WhatsAppClient } from './controllers/whatsapp';
 import { setupRoutes } from './controllers/routes';
 import fs from 'fs';
+import { LLMClient } from './services/llm/LLMClient';
 
 // Load environment variables
 config();
+
+// Fail fast if the LLM provider is not configured (missing API key etc.)
+try {
+  LLMClient.getInstance();
+} catch (error) {
+  console.error(`Startup configuration error: ${(error as Error).message}`);
+  process.exit(1);
+}
 
 // Initialize Express app
 const app = express();

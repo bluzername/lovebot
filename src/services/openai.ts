@@ -1,7 +1,6 @@
-import OpenAI from 'openai';
 import pino from 'pino';
 import dotenv from 'dotenv';
-import { requireEnv, optionalEnv } from '../config';
+import { LLMClient } from './llm/LLMClient';
 
 // Load environment variables
 dotenv.config();
@@ -19,24 +18,21 @@ const logger = pino({
   }
 });
 
-// Initialize OpenAI client. Fails fast if the key is not configured.
-const openai = new OpenAI({
-  apiKey: requireEnv('OPENAI_API_KEY'),
-});
-
 /**
- * Generate a response using OpenAI's API
+ * Generate a plain chat response using the configured LLM provider
+ * (see src/config.ts for provider and model resolution).
  * @param prompt The user's prompt
  * @returns The AI-generated response
  */
 export async function generateAIResponse(prompt: string): Promise<string> {
   try {
-    const model = optionalEnv('OPENAI_MODEL', 'gpt-3.5-turbo');
-    logger.info(`Using OpenAI model: ${model}`);
+    const client = LLMClient.getInstance();
+    const model = LLMClient.getModel();
+    logger.info(`Using ${LLMClient.getProvider()} model: ${model}`);
 
     // Generate response
-    const completion = await openai.chat.completions.create({
-      model: model,
+    const completion = await client.chat.completions.create({
+      model,
       messages: [
         { role: 'system', content: 'You are a helpful assistant in a WhatsApp chat. Provide concise and accurate responses.' },
         { role: 'user', content: prompt }

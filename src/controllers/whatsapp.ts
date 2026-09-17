@@ -22,6 +22,7 @@ import { EventEmitter } from 'events';
 import { RelationshipAdviceService } from '../services/relationshipAdvice';
 import path from 'path';
 import { LLMClient, LLMProvider } from '../services/llm/LLMClient';
+import { getLLMSettings, isLLMKeyConfigured } from '../config';
 
 // Create logger
 const logger = pino({
@@ -939,8 +940,9 @@ export class WhatsAppClient extends EventEmitter {
                       console.log('- Running in: Local-only mode');
                       console.log('- Connection: Simulated');
                       console.log('- Commands processed: Working');
-                      console.log(`- OpenAI: ${process.env.OPENAI_API_KEY ? 'Configured' : 'Not configured'}`);
-                      console.log(`- Model: ${process.env.OPENAI_MODEL || 'gpt-3.5-turbo'}`);
+                      console.log(`- Provider: ${getLLMSettings().provider}`);
+                      console.log(`- API key: ${isLLMKeyConfigured() ? 'Configured' : 'Not configured'}`);
+                      console.log(`- Model: ${getLLMSettings().model}`);
                       break;
                       
                     default:

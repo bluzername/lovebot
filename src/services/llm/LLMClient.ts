@@ -1,10 +1,21 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import pino from 'pino';
-import { requireEnv } from '../../config';
+import {
+  LLMProvider,
+  LLMSettings,
+  getLLMSettings,
+  requireEnv,
+  optionalEnv,
+  OPENROUTER_BASE_URL,
+  DEFAULT_OPENROUTER_SITE_URL,
+} from '../../config';
 
 // Load environment variables
 dotenv.config();
+
+// Re-export so existing importers keep working
+export { LLMProvider };
 
 // Create logger
 const logger = pino({
@@ -19,16 +30,8 @@ const logger = pino({
   }
 });
 
-// Supported LLM providers
-export enum LLMProvider {
-  OPENAI = 'openai',
-  OPENROUTER = 'openrouter',
-}
-
-interface LLMState {
+interface LLMState extends LLMSettings {
   client: OpenAI;
-  provider: LLMProvider;
-  model: string;
 }
 
 /**
@@ -69,35 +72,28 @@ export class LLMClient {
   }
 
   /**
-   * Initialize the LLM client
+   * Initialize the LLM client. Throws if the provider's API key is missing.
    */
   private static initialize(): LLMState {
-    // Determine the provider
-    const providerStr = process.env.LLM_PROVIDER?.toLowerCase() || LLMProvider.OPENAI;
-    const provider = Object.values(LLMProvider).includes(providerStr as LLMProvider)
-      ? providerStr as LLMProvider
-      : LLMProvider.OPENAI;
+    const settings = getLLMSettings();
+    const apiKey = requireEnv(settings.apiKeyEnvName);
 
-    if (provider === LLMProvider.OPENROUTER) {
-      const model = process.env.OPENROUTER_MODEL || 'openai/gpt-3.5-turbo';
+    if (settings.provider === LLMProvider.OPENROUTER) {
       const client = new OpenAI({
-        apiKey: requireEnv('OPENROUTER_API_KEY'),
-        baseURL: 'https://openrouter.ai/api/v1',
+        apiKey,
+        baseURL: OPENROUTER_BASE_URL,
         defaultHeaders: {
-          'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://lovebot.com',
+          'HTTP-Referer': optionalEnv('OPENROUTER_SITE_URL', DEFAULT_OPENROUTER_SITE_URL),
           'X-Title': 'LoveBot',
         },
       });
-      logger.info(`Initialized OpenRouter client with model: ${model}`);
-      return { client, provider, model };
+      logger.info(`Initialized OpenRouter client with model: ${settings.model}`);
+      return { ...settings, client };
     }
 
-    const model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
-    const client = new OpenAI({
-      apiKey: requireEnv('OPENAI_API_KEY'),
-    });
-    logger.info(`Initialized OpenAI client with model: ${model}`);
-    return { client, provider, model };
+    const client = new OpenAI({ apiKey });
+    logger.info(`Initialized OpenAI client with model: ${settings.model}`);
+    return { ...settings, client };
   }
 
   /**
@@ -108,34 +104,34 @@ export class LLMClient {
   }
 
   /**
-   * Get information about available models for the current provider
+   * Get information about available models for the current provider.
+   * Ids verified against provider docs on 2026-09-17; any id the provider
+   * accepts can be set via OPENAI_MODEL / OPENROUTER_MODEL.
    * @returns Object with available models and their descriptions
    */
   public static getAvailableModels(): { [key: string]: string } {
-    const provider = LLMClient.getProvider();
+    const provider = getLLMSettings().provider;
     if (provider === LLMProvider.OPENAI) {
       return {
-        'gpt-3.5-turbo': 'OpenAI GPT-3.5 Turbo - Fast and cost-effective',
-        'gpt-4o': 'OpenAI GPT-4o - Latest model with enhanced capabilities',
-        'gpt-4o-mini': 'OpenAI GPT-4o Mini - Smaller, faster version of GPT-4o',
-        'gpt-4-turbo': 'OpenAI GPT-4 Turbo - Previous generation premium model',
-      };
-    } else if (provider === LLMProvider.OPENROUTER) {
-      return {
-        'openai/gpt-3.5-turbo': 'OpenAI GPT-3.5 Turbo - Fast and cost-effective',
-        'openai/gpt-4o': 'OpenAI GPT-4o - Latest model with enhanced capabilities',
-        'openai/gpt-4-turbo': 'OpenAI GPT-4 Turbo - Premium model with strong reasoning',
-        'anthropic/claude-3-opus': 'Anthropic Claude 3 Opus - Most capable Claude model',
-        'anthropic/claude-3-sonnet': 'Anthropic Claude 3 Sonnet - Balanced Claude model',
-        'anthropic/claude-3-haiku': 'Anthropic Claude 3 Haiku - Fast, efficient Claude model',
-        'meta-llama/llama-3-70b-instruct': 'Meta Llama 3 70B - Open weights model with strong capabilities',
-        'meta-llama/llama-3-8b-instruct': 'Meta Llama 3 8B - Smaller, efficient Llama model',
-        'mistral/mistral-large': 'Mistral Large - High performance open weights model',
-        'mistral/mistral-medium': 'Mistral Medium - Mid-tier open weights model',
-        'mistral/mistral-small': 'Mistral Small - Efficient open weights model',
+        'gpt-4o-mini': 'OpenAI GPT-4o mini - fast, affordable small model (default)',
+        'gpt-5.6-luna': 'OpenAI GPT-5.6 Luna - cost-optimized current generation model',
+        'gpt-5.6-sol': 'OpenAI GPT-5.6 Sol - flagship model',
       };
     }
-    
+    if (provider === LLMProvider.OPENROUTER) {
+      return {
+        'openai/gpt-4o-mini': 'OpenAI GPT-4o mini - fast, affordable small model (default)',
+        'openai/gpt-5.6-luna': 'OpenAI GPT-5.6 Luna - cost-optimized current generation model',
+        'openai/gpt-4o': 'OpenAI GPT-4o',
+        'anthropic/claude-haiku-4.5': 'Anthropic Claude Haiku 4.5 - fast, efficient',
+        'anthropic/claude-sonnet-5': 'Anthropic Claude Sonnet 5 - balanced',
+        'anthropic/claude-opus-5': 'Anthropic Claude Opus 5 - most capable',
+        'meta-llama/llama-3.3-70b-instruct': 'Meta Llama 3.3 70B - open weights',
+        'meta-llama/llama-3.1-8b-instruct': 'Meta Llama 3.1 8B - small open weights',
+        'mistralai/mistral-large': 'Mistral Large',
+        'mistralai/mistral-small-2603': 'Mistral Small',
+      };
+    }
     return {};
   }
-} 
+}

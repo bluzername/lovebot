@@ -1,6 +1,7 @@
 import { WAMessage, proto } from '@whiskeysockets/baileys';
 import { generateAIResponse } from './openai';
 import pino from 'pino';
+import { getLLMSettings, isLLMKeyConfigured } from '../config';
 
 // Create logger
 const logger = pino({
@@ -154,8 +155,9 @@ async function handleStatusCommand(sock: any, jid: string) {
 *LoveBot Status*
 - Running: Yes
 - Commands: Working
-- OpenAI: ${process.env.OPENAI_API_KEY ? 'Configured' : 'Not configured'}
-- Model: ${process.env.OPENAI_MODEL || 'gpt-3.5-turbo'}
+- Provider: ${getLLMSettings().provider}
+- API key: ${isLLMKeyConfigured() ? 'Configured' : 'Not configured'}
+- Model: ${getLLMSettings().model}
 `;
     
     await sock.sendMessage(jid, { text: statusText });
