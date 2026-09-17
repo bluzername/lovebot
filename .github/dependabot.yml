@@ -8,6 +8,9 @@ updates:
       # Baileys 7.x is a release candidate with breaking changes; bump on purpose.
       - dependency-name: "@whiskeysockets/baileys"
         update-types: ["version-update:semver-major"]
+      # Baileys 6.7 pins sharp to 0.32/0.33; newer sharp breaks npm ci (see closed PR #9).
+      - dependency-name: "sharp"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
