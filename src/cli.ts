@@ -1,14 +1,9 @@
 import { config } from 'dotenv';
 import { WhatsAppClient } from './controllers/whatsapp';
-import { WhatsAppTest } from './test_whatsapp';
 import { Server } from './server';
+import { LLMClient } from './services/llm/LLMClient';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
-
-// Import crypto polyfill first to ensure it's available
-// Ensure crypto is available globally
-// global.crypto = crypto as any; // This line causes issues
 
 // Import the ChatHistoryImporter and ContextManager for test-chat-import
 import { ChatHistoryImporter } from './services/chatHistoryImporter';
@@ -75,6 +70,14 @@ if (testChatImportIndex !== -1 && testChatImportIndex + 1 < args.length) {
   // Run the test
   testChatImport(importFilePath);
 } else {
+  // Fail fast if the LLM provider is not configured (missing API key etc.)
+  try {
+    LLMClient.getInstance();
+  } catch (error) {
+    console.error(`Startup configuration error: ${(error as Error).message}`);
+    process.exit(1);
+  }
+
   // Initialize WhatsApp client
   let whatsappClient: WhatsAppClient;
 

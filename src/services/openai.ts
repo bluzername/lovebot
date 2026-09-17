@@ -1,6 +1,6 @@
-import OpenAI from 'openai';
 import pino from 'pino';
 import dotenv from 'dotenv';
+import { LLMClient } from './llm/LLMClient';
 
 // Load environment variables
 dotenv.config();
@@ -18,43 +18,21 @@ const logger = pino({
   }
 });
 
-// Debug log environment variables
-logger.info('Environment variables loaded:');
-logger.info(`LOG_LEVEL: ${process.env.LOG_LEVEL}`);
-logger.info(`OPENAI_MODEL: ${process.env.OPENAI_MODEL}`);
-logger.info(`OPENAI_API_KEY length: ${process.env.OPENAI_API_KEY?.length || 0}`);
-logger.info(`OPENAI_API_KEY prefix: ${process.env.OPENAI_API_KEY?.substring(0, 10)}...`);
-
-// Initialize OpenAI client
-const openai = new OpenAI({
-  // apiKey: process.env.OPENAI_API_KEY,
-  apiKey: "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",
-});
-
 /**
- * Generate a response using OpenAI's API
+ * Generate a plain chat response using the configured LLM provider
+ * (see src/config.ts for provider and model resolution).
  * @param prompt The user's prompt
  * @returns The AI-generated response
  */
 export async function generateAIResponse(prompt: string): Promise<string> {
   try {
-    // Check if API key is configured
-    if (!process.env.OPENAI_API_KEY) {
-      logger.warn('OpenAI API key not configured');
-      return 'OpenAI API key not configured. Please set the OPENAI_API_KEY environment variable.';
-    }
-
-    // Log the API key (first few characters only for security)
-    const apiKey = process.env.OPENAI_API_KEY;
-    logger.info(`Using OpenAI API key: ${apiKey.substring(0, 8)}...`);
-    
-    // Log the model being used
-    const model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
-    logger.info(`Using OpenAI model: ${model}`);
+    const client = LLMClient.getInstance();
+    const model = LLMClient.getModel();
+    logger.info(`Using ${LLMClient.getProvider()} model: ${model}`);
 
     // Generate response
-    const completion = await openai.chat.completions.create({
-      model: model,
+    const completion = await client.chat.completions.create({
+      model,
       messages: [
         { role: 'system', content: 'You are a helpful assistant in a WhatsApp chat. Provide concise and accurate responses.' },
         { role: 'user', content: prompt }
@@ -84,4 +62,4 @@ export async function generateAIResponse(prompt: string): Promise<string> {
     
     return 'Sorry, I encountered an error while generating a response. Please check your API key and try again.';
   }
-} 
+}

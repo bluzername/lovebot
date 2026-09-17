@@ -1,7 +1,7 @@
 import { WAMessage, proto } from '@whiskeysockets/baileys';
 import { generateAIResponse } from './openai';
 import pino from 'pino';
-import { WhatsAppClient } from '../controllers/whatsapp';
+import { getLLMSettings, isLLMKeyConfigured } from '../config';
 
 // Create logger
 const logger = pino({
@@ -65,7 +65,7 @@ export async function processMessage(sock: any, message: WAMessage) {
   }
 }
 
-async function handleCommand(sock: any, message: WAMessage, text: string) {
+export async function handleCommand(sock: any, message: WAMessage, text: string) {
   const jid = message.key.remoteJid!;
   const commandText = text.trim().toLowerCase();
 
@@ -155,8 +155,9 @@ async function handleStatusCommand(sock: any, jid: string) {
 *LoveBot Status*
 - Running: Yes
 - Commands: Working
-- OpenAI: ${process.env.OPENAI_API_KEY ? 'Configured' : 'Not configured'}
-- Model: ${process.env.OPENAI_MODEL || 'gpt-3.5-turbo'}
+- Provider: ${getLLMSettings().provider}
+- API key: ${isLLMKeyConfigured() ? 'Configured' : 'Not configured'}
+- Model: ${getLLMSettings().model}
 `;
     
     await sock.sendMessage(jid, { text: statusText });

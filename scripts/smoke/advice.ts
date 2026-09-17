@@ -1,5 +1,5 @@
 import { WAMessage } from '@whiskeysockets/baileys';
-import { RelationshipAdviceService } from './services/relationshipAdvice';
+import { RelationshipAdviceService } from '../../src/services/relationshipAdvice';
 import dotenv from 'dotenv';
 import pino from 'pino';
 

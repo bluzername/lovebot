@@ -1,5 +1,5 @@
 import { WAMessage } from '@whiskeysockets/baileys';
-import { MessageAnalyzer, ContextManager, InterventionEngine, RelationshipAdviceService } from './services/relationshipAdvice';
+import { MessageAnalyzer, ContextManager, InterventionEngine, RelationshipAdviceService } from '../../src/services/relationshipAdvice';
 import dotenv from 'dotenv';
 
 // Load environment variables

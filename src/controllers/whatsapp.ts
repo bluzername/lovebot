@@ -16,12 +16,13 @@ import pino from 'pino';
 import { join } from 'path';
 import fs from 'fs';
 import NodeCache from 'node-cache';
-import { processMessage } from '../services/messageHandler';
+import { processMessage, handleCommand } from '../services/messageHandler';
 import { generateQR } from '../utils/qrcode';
 import { EventEmitter } from 'events';
 import { RelationshipAdviceService } from '../services/relationshipAdvice';
 import path from 'path';
 import { LLMClient, LLMProvider } from '../services/llm/LLMClient';
+import { getLLMSettings, isLLMKeyConfigured } from '../config';
 
 // Create logger
 const logger = pino({
@@ -400,7 +401,7 @@ export class WhatsAppClient extends EventEmitter {
           // Check if message is a command
           if (textContent.startsWith('/')) {
             console.log(`🤖 Processing command: ${textContent}`);
-            await this.handleCommand(jid, textContent, textContent.split(' '));
+            await handleCommand(this.sock, message, textContent);
           } else {
             // Process with relationship advice service if available
             if (this.relationshipAdviceService && !this.localOnlyMode) {
@@ -939,8 +940,9 @@ export class WhatsAppClient extends EventEmitter {
                       console.log('- Running in: Local-only mode');
                       console.log('- Connection: Simulated');
                       console.log('- Commands processed: Working');
-                      console.log(`- OpenAI: ${process.env.OPENAI_API_KEY ? 'Configured' : 'Not configured'}`);
-                      console.log(`- Model: ${process.env.OPENAI_MODEL || 'gpt-3.5-turbo'}`);
+                      console.log(`- Provider: ${getLLMSettings().provider}`);
+                      console.log(`- API key: ${isLLMKeyConfigured() ? 'Configured' : 'Not configured'}`);
+                      console.log(`- Model: ${getLLMSettings().model}`);
                       break;
                       
                     default:
