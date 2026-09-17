@@ -25,23 +25,24 @@ export enum LLMProvider {
   OPENROUTER = 'openrouter',
 }
 
+interface LLMState {
+  client: OpenAI;
+  provider: LLMProvider;
+  model: string;
+}
+
 /**
  * Factory class to create and configure LLM clients
  */
 export class LLMClient {
-  private static instance: OpenAI;
-  private static provider: LLMProvider;
-  private static model: string;
+  private static state: LLMState | undefined;
 
   /**
    * Get the LLM client instance
    * @returns The OpenAI compatible client
    */
   public static getInstance(): OpenAI {
-    if (!LLMClient.instance) {
-      LLMClient.initialize();
-    }
-    return LLMClient.instance;
+    return LLMClient.getState().client;
   }
 
   /**
@@ -49,10 +50,7 @@ export class LLMClient {
    * @returns The model name
    */
   public static getModel(): string {
-    if (!LLMClient.model) {
-      LLMClient.initialize();
-    }
-    return LLMClient.model;
+    return LLMClient.getState().model;
   }
 
   /**
@@ -60,37 +58,29 @@ export class LLMClient {
    * @returns The provider enum
    */
   public static getProvider(): LLMProvider {
-    if (!LLMClient.provider) {
-      LLMClient.initialize();
+    return LLMClient.getState().provider;
+  }
+
+  private static getState(): LLMState {
+    if (!LLMClient.state) {
+      LLMClient.state = LLMClient.initialize();
     }
-    return LLMClient.provider;
+    return LLMClient.state;
   }
 
   /**
    * Initialize the LLM client
    */
-  private static initialize(): void {
+  private static initialize(): LLMState {
     // Determine the provider
     const providerStr = process.env.LLM_PROVIDER?.toLowerCase() || LLMProvider.OPENAI;
-    LLMClient.provider = Object.values(LLMProvider).includes(providerStr as LLMProvider)
+    const provider = Object.values(LLMProvider).includes(providerStr as LLMProvider)
       ? providerStr as LLMProvider
       : LLMProvider.OPENAI;
 
-    // Set the model based on provider
-    if (LLMClient.provider === LLMProvider.OPENAI) {
-      LLMClient.model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
-    } else if (LLMClient.provider === LLMProvider.OPENROUTER) {
-      LLMClient.model = process.env.OPENROUTER_MODEL || 'openai/gpt-3.5-turbo';
-    }
-
-    // Configure the client based on provider
-    if (LLMClient.provider === LLMProvider.OPENAI) {
-      LLMClient.instance = new OpenAI({
-        apiKey: requireEnv('OPENAI_API_KEY'),
-      });
-      logger.info(`Initialized OpenAI client with model: ${LLMClient.model}`);
-    } else if (LLMClient.provider === LLMProvider.OPENROUTER) {
-      LLMClient.instance = new OpenAI({
+    if (provider === LLMProvider.OPENROUTER) {
+      const model = process.env.OPENROUTER_MODEL || 'openai/gpt-3.5-turbo';
+      const client = new OpenAI({
         apiKey: requireEnv('OPENROUTER_API_KEY'),
         baseURL: 'https://openrouter.ai/api/v1',
         defaultHeaders: {
@@ -98,17 +88,23 @@ export class LLMClient {
           'X-Title': 'LoveBot',
         },
       });
-      logger.info(`Initialized OpenRouter client with model: ${LLMClient.model}`);
+      logger.info(`Initialized OpenRouter client with model: ${model}`);
+      return { client, provider, model };
     }
+
+    const model = process.env.OPENAI_MODEL || 'gpt-3.5-turbo';
+    const client = new OpenAI({
+      apiKey: requireEnv('OPENAI_API_KEY'),
+    });
+    logger.info(`Initialized OpenAI client with model: ${model}`);
+    return { client, provider, model };
   }
 
   /**
    * Reset the client instance (mainly for testing)
    */
   public static reset(): void {
-    LLMClient.instance = undefined;
-    LLMClient.provider = undefined;
-    LLMClient.model = undefined;
+    LLMClient.state = undefined;
   }
 
   /**
@@ -116,14 +112,15 @@ export class LLMClient {
    * @returns Object with available models and their descriptions
    */
   public static getAvailableModels(): { [key: string]: string } {
-    if (LLMClient.provider === LLMProvider.OPENAI) {
+    const provider = LLMClient.getProvider();
+    if (provider === LLMProvider.OPENAI) {
       return {
         'gpt-3.5-turbo': 'OpenAI GPT-3.5 Turbo - Fast and cost-effective',
         'gpt-4o': 'OpenAI GPT-4o - Latest model with enhanced capabilities',
         'gpt-4o-mini': 'OpenAI GPT-4o Mini - Smaller, faster version of GPT-4o',
         'gpt-4-turbo': 'OpenAI GPT-4 Turbo - Previous generation premium model',
       };
-    } else if (LLMClient.provider === LLMProvider.OPENROUTER) {
+    } else if (provider === LLMProvider.OPENROUTER) {
       return {
         'openai/gpt-3.5-turbo': 'OpenAI GPT-3.5 Turbo - Fast and cost-effective',
         'openai/gpt-4o': 'OpenAI GPT-4o - Latest model with enhanced capabilities',

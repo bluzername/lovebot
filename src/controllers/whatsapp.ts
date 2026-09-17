@@ -16,7 +16,7 @@ import pino from 'pino';
 import { join } from 'path';
 import fs from 'fs';
 import NodeCache from 'node-cache';
-import { processMessage } from '../services/messageHandler';
+import { processMessage, handleCommand } from '../services/messageHandler';
 import { generateQR } from '../utils/qrcode';
 import { EventEmitter } from 'events';
 import { RelationshipAdviceService } from '../services/relationshipAdvice';
@@ -400,7 +400,7 @@ export class WhatsAppClient extends EventEmitter {
           // Check if message is a command
           if (textContent.startsWith('/')) {
             console.log(`🤖 Processing command: ${textContent}`);
-            await this.handleCommand(jid, textContent, textContent.split(' '));
+            await handleCommand(this.sock, message, textContent);
           } else {
             // Process with relationship advice service if available
             if (this.relationshipAdviceService && !this.localOnlyMode) {

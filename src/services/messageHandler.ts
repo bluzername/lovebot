@@ -1,7 +1,6 @@
 import { WAMessage, proto } from '@whiskeysockets/baileys';
 import { generateAIResponse } from './openai';
 import pino from 'pino';
-import { WhatsAppClient } from '../controllers/whatsapp';
 
 // Create logger
 const logger = pino({
@@ -65,7 +64,7 @@ export async function processMessage(sock: any, message: WAMessage) {
   }
 }
 
-async function handleCommand(sock: any, message: WAMessage, text: string) {
+export async function handleCommand(sock: any, message: WAMessage, text: string) {
   const jid = message.key.remoteJid!;
   const commandText = text.trim().toLowerCase();
 
