@@ -1,6 +1,5 @@
 import { config } from 'dotenv';
 import { WhatsAppClient } from './controllers/whatsapp';
-import { WhatsAppTest } from './test_whatsapp';
 import { Server } from './server';
 import fs from 'fs';
 import path from 'path';
