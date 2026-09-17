@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import dotenv from 'dotenv';
 import pino from 'pino';
+import { requireEnv } from '../../config';
 
 // Load environment variables
 dotenv.config();
@@ -85,12 +86,12 @@ export class LLMClient {
     // Configure the client based on provider
     if (LLMClient.provider === LLMProvider.OPENAI) {
       LLMClient.instance = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
+        apiKey: requireEnv('OPENAI_API_KEY'),
       });
       logger.info(`Initialized OpenAI client with model: ${LLMClient.model}`);
     } else if (LLMClient.provider === LLMProvider.OPENROUTER) {
       LLMClient.instance = new OpenAI({
-        apiKey: process.env.OPENROUTER_API_KEY,
+        apiKey: requireEnv('OPENROUTER_API_KEY'),
         baseURL: 'https://openrouter.ai/api/v1',
         defaultHeaders: {
           'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'https://lovebot.com',
