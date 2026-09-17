@@ -5,12 +5,16 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
+    "typecheck": "tsc --noEmit",
     "start": "node -r ./crypto-polyfill.js dist/index.js",
-    "start:local": "node -r ./crypto-polyfill.js --require ts-node/register src/cli.ts --local-only",
-    "render-start": "node -r ./crypto-polyfill.js dist/index.js",
     "dev": "node -r ./crypto-polyfill.js -r ts-node/register src/index.ts",
     "watch": "nodemon --exec node -r ./crypto-polyfill.js -r ts-node/register src/index.ts",
-    "cli": "node -r ./crypto-polyfill.js -r ts-node/register --transpile-only src/cli.ts"
+    "cli": "node -r ./crypto-polyfill.js -r ts-node/register/transpile-only src/cli.ts",
+    "cli:local": "node -r ./crypto-polyfill.js -r ts-node/register/transpile-only src/cli.ts --local-only",
+    "smoke:advice": "node -r ./crypto-polyfill.js -r ts-node/register/transpile-only scripts/smoke/advice.ts",
+    "smoke:comprehensive": "node -r ./crypto-polyfill.js -r ts-node/register/transpile-only scripts/smoke/comprehensive.ts",
+    "smoke:analyzer": "node -r ./crypto-polyfill.js -r ts-node/register/transpile-only scripts/smoke/analyzer.ts",
+    "smoke:import": "node -r ./crypto-polyfill.js -r ts-node/register/transpile-only src/cli.ts --test-chat-import test_files/sample_chats.zip"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
