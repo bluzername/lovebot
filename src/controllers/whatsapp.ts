@@ -3,7 +3,6 @@ import makeWASocket, {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   makeCacheableSignalKeyStore,
-  makeInMemoryStore,
   Browsers,
   WAMessage,
   WAMessageContent,
@@ -36,13 +35,6 @@ const logger = pino({
     }
   }
 });
-
-// Create message store
-const store = makeInMemoryStore({ logger });
-store.readFromFile('./baileys_store.json');
-setInterval(() => {
-  store.writeToFile('./baileys_store.json');
-}, 10000);
 
 // Create cache for messages
 const msgRetryCache = new NodeCache();
@@ -141,9 +133,6 @@ export class WhatsAppClient extends EventEmitter {
           return message;
         }
       });
-      
-      // Bind store to socket
-      store.bind(this.sock.ev);
       
       // Set up event handlers
       this.setupEventHandlers(saveCreds);
@@ -1094,10 +1083,7 @@ export class WhatsAppClient extends EventEmitter {
    * Clears the message store to avoid skipping messages
    */
   private clearMessageStore() {
-    // Clear the in-memory store
-    store.messages = {};
-    
-    // Delete the store file if it exists
+    // Delete any leftover store file from older versions (baileys 6.7.17+ removed makeInMemoryStore)
     if (fs.existsSync('./baileys_store.json')) {
       try {
         fs.unlinkSync('./baileys_store.json');
